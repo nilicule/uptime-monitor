@@ -125,11 +125,6 @@ async function writeResult(kv, result, maintenance) {
   // latest:{id} — 1h TTL
   await kv.put(`latest:${result.id}`, value, { expirationTtl: TTL_1H });
 
-  // result:{id}:{ts} — 90d TTL
-  await kv.put(`result:${result.id}:${result.ts}`, value, {
-    expirationTtl: TTL_90D,
-  });
-
   // summary:{id}:{YYYY-MM-DD-HH} — read-modify-write, 90d TTL
   const hk = `summary:${result.id}:${hourKey(result.ts)}`;
   const existing = await kv.get(hk, "json");
