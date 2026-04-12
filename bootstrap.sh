@@ -3,7 +3,7 @@ set -uo pipefail  # intentionally no -e: we handle exit codes explicitly
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# ─── Check wrangler ───────────────────────────────────────────────────────────
+# ─── Check dependencies ───────────────────────────────────────────────────────
 
 if ! command -v wrangler &>/dev/null; then
   echo "Error: wrangler is not installed. Run: npm install -g wrangler" >&2
@@ -14,6 +14,65 @@ if ! wrangler whoami &>/dev/null; then
   echo "Error: not logged in to Cloudflare. Run: wrangler login" >&2
   exit 1
 fi
+
+if ! command -v jq &>/dev/null; then
+  echo "Error: jq is not installed. Install it via your package manager." >&2
+  exit 1
+fi
+
+# ─── Helpers ──────────────────────────────────────────────────────────────────
+
+slugify() {
+  echo "$1" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g' | sed 's/-\+/-/g' | sed 's/^-\|-$//g'
+}
+
+add_monitor_interactive() {
+  local monitors_json="$1"
+
+  read -rp "Type [http/tcp]: " TYPE
+  if [[ "$TYPE" != "http" && "$TYPE" != "tcp" ]]; then
+    echo "Error: type must be 'http' or 'tcp'" >&2
+    return 1
+  fi
+
+  read -rp "Name (human-readable label): " NAME
+  if [[ -z "$NAME" ]]; then
+    echo "Error: name cannot be empty" >&2
+    return 1
+  fi
+
+  local ID
+  ID=$(slugify "$NAME")
+  echo "Generated ID: $ID"
+  read -rp "Accept ID '$ID'? [Y/n]: " CONFIRM_ID
+  if [[ "${CONFIRM_ID,,}" == "n" ]]; then
+    read -rp "Enter custom ID: " ID
+    ID=$(slugify "$ID")
+    echo "Using ID: $ID"
+  fi
+
+  local NEW_ENTRY
+  if [[ "$TYPE" == "http" ]]; then
+    read -rp "URL: " URL
+    read -rp "Expected status codes (comma-separated) [200]: " STATUS_RAW
+    STATUS_RAW="${STATUS_RAW:-200}"
+    local STATUS_JSON
+    STATUS_JSON=$(echo "$STATUS_RAW" | tr ',' '\n' | sed 's/[[:space:]]//g' | jq -R 'tonumber' | jq -s '.')
+    NEW_ENTRY=$(jq -n \
+      --arg id "$ID" --arg name "$NAME" --arg url "$URL" \
+      --argjson expectedStatus "$STATUS_JSON" \
+      '{id: $id, name: $name, type: "http", url: $url, expectedStatus: $expectedStatus}')
+  else
+    read -rp "Host: " HOST
+    read -rp "Port: " PORT
+    NEW_ENTRY=$(jq -n \
+      --arg id "$ID" --arg name "$NAME" --arg host "$HOST" \
+      --argjson port "$PORT" \
+      '{id: $id, name: $name, type: "tcp", host: $host, port: $port}')
+  fi
+
+  echo "$monitors_json" | jq --argjson entry "$NEW_ENTRY" '. + [$entry]'
+}
 
 # ─── Create KV namespaces ─────────────────────────────────────────────────────
 
@@ -54,24 +113,26 @@ sed \
 
 echo "wrangler.toml created (gitignored — never committed)."
 
-# ─── Set MONITORS_CONFIG secret ───────────────────────────────────────────────
+# ─── Configure monitors ───────────────────────────────────────────────────────
 
 echo ""
 echo "Now let's configure your monitors."
-echo ""
-echo "Paste your monitors JSON (single line), then press Enter:"
-echo ""
-echo "Example:"
-cat <<'EXAMPLE'
-[{"id":"plex","name":"Plex","type":"http","url":"https://plex.example.com","expectedStatus":[200,401]},{"id":"nas","name":"NAS","type":"tcp","host":"nas.example.com","port":5000}]
-EXAMPLE
-echo ""
-read -r MONITORS_JSON
+echo "Add at least one monitor to get started."
 
-if [[ -z "$MONITORS_JSON" ]]; then
-  echo "Error: no JSON provided. Run this script again to set the secret." >&2
-  exit 1
-fi
+MONITORS_JSON="[]"
+while true; do
+  echo ""
+  echo "─────────────────"
+  MONITORS_JSON=$(add_monitor_interactive "$MONITORS_JSON") || exit 1
+  echo ""
+  read -rp "Add another monitor? [y/N]: " MORE
+  [[ "${MORE,,}" == "y" ]] || break
+done
+
+echo ""
+echo "Monitors to be configured:"
+echo "$MONITORS_JSON" | jq -r '.[] | "  [\(.type)] \(.name) — \(if .type == "http" then .url else "\(.host):\(.port)" end)"'
+echo ""
 
 echo "$MONITORS_JSON" | wrangler secret put MONITORS_CONFIG
 

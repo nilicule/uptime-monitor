@@ -48,14 +48,9 @@ cd uptime-monitor
 - Generate a local `wrangler.toml` with your namespace IDs (gitignored)
 - Prompt you for your monitors config and store it as a secret
 
-**2. Enter your monitors when prompted**
+**2. Add your monitors when prompted**
 
-```json
-[
-  { "id": "mysite", "name": "My Site", "type": "http", "url": "https://example.com", "expectedStatus": [200] },
-  { "id": "mynas",  "name": "NAS",     "type": "tcp",  "host": "nas.local", "port": 22 }
-]
-```
+The script will walk you through adding monitors one at a time — type, name, URL (or host/port for TCP), and expected status codes. You can add as many as you like before deploying.
 
 **3. Deploy**
 
