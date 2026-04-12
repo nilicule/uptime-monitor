@@ -179,6 +179,33 @@ async function detectAndWriteEvents(kv, result, prevResult, maintenance) {
   }
 }
 
+/**
+ * Run a single monitor check: read previous state + maintenance state,
+ * execute check, write result and events.
+ */
+async function runMonitor(kv, monitor) {
+  const [prevResult, maintenanceRaw] = await Promise.all([
+    kv.get(`latest:${monitor.id}`, "json"),
+    kv.get(`maintenance:${monitor.id}`, "json"),
+  ]);
+
+  // Resolve effective maintenance state; clean up if expired
+  let maintenance = null;
+  if (maintenanceRaw && maintenanceRaw.active) {
+    const now = Math.floor(Date.now() / 1000);
+    if (maintenanceRaw.expiresAt === null || now <= maintenanceRaw.expiresAt) {
+      maintenance = maintenanceRaw;
+    } else {
+      await kv.delete(`maintenance:${monitor.id}`);
+    }
+  }
+
+  const result = await runCheck(monitor);
+  await writeResult(kv, result, prevResult, maintenance);
+  await detectAndWriteEvents(kv, result, prevResult, maintenance);
+  return result;
+}
+
 // ─── Dashboard snapshot builder ───────────────────────────────────────────────
 
 async function buildSnapshot(kv, monitors) {
@@ -273,11 +300,8 @@ async function handleScheduled(env) {
 
   await syncConfigMirror(env, monitors);
 
-  // Run all checks in parallel; each is individually wrapped
-  const results = await Promise.all(monitors.map(runCheck));
-
-  // Persist each result
-  await Promise.all(results.map((result) => writeResult(env.UPTIME_KV, result)));
+  // Run all monitors (each reads its own prev state + maintenance state)
+  const results = await Promise.all(monitors.map((m) => runMonitor(env.UPTIME_KV, m)));
 
   // Rebuild and store the dashboard snapshot
   const snapshot = await buildSnapshot(env.UPTIME_KV, monitors);
