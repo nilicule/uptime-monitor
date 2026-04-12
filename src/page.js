@@ -570,61 +570,56 @@ export function getPage() {
       });
     }
 
-    function buildRecentEvents(results) {
-      if (!results.length) return '<p style="color:var(--muted)">No data for the last 24 hours.</p>';
-
-      const sorted = [...results].sort((a, b) => a.ts - b.ts);
-      const events = [];
-      let downSince = null;
-      let downError = null;
-
-      for (let i = 0; i < sorted.length; i++) {
-        const r    = sorted[i];
-        const prev = sorted[i - 1];
-
-        if (!prev) {
-          if (!r.ok) {
-            downSince = r.ts;
-            downError = r.error || (r.statusCode ? 'HTTP ' + r.statusCode : null);
-          }
-          continue;
-        }
-
-        if (prev.ok && !r.ok) {
-          downSince = r.ts;
-          downError = r.error || (r.statusCode ? 'HTTP ' + r.statusCode : null);
-        } else if (!prev.ok && r.ok) {
-          const dur = downSince != null ? r.ts - downSince : null;
-          events.push({ type: 'down', ts: downSince ?? r.ts, dur, error: downError });
-          events.push({ type: 'up',   ts: r.ts });
-          downSince = null;
-          downError = null;
-        }
+    // ── Render pre-computed events (from /api/monitor/:id) ────────────────
+    function renderEvents(events) {
+      if (!events || !events.length) {
+        return '<p style="color:var(--muted)">No events in the last 90 days.</p>';
       }
 
-      if (downSince != null) {
-        const dur = Math.floor(Date.now() / 1000) - downSince;
-        events.push({ type: 'down', ts: downSince, dur, error: downError, ongoing: true });
-      }
+      // Sort chronologically so we can calculate down durations
+      const chron = [...events].sort((a, b) => a.ts - b.ts);
 
-      if (!events.length) return '<p style="color:var(--muted)">No incidents in the last 24 hours.</p>';
-
-      return '<div class="events-list">' + events.reverse().map(ev => {
+      const items = [...chron].reverse().map(ev => {
         if (ev.type === 'up') {
           return \`<div class="event-item">
             <div class="event-row"><span class="event-icon up">↑</span><span class="event-title">Running again</span></div>
             <div class="event-time">\${escHtml(fmtTime(ev.ts))}</div>
           </div>\`;
         }
-        const durStr   = ev.dur > 60 ? ' · ' + fmtDuration(ev.dur) : '';
-        const label    = ev.ongoing ? 'Currently down' : 'Down';
-        const errorRow = ev.error ? \`<div class="event-error">\${escHtml(ev.error)}</div>\` : '';
-        return \`<div class="event-item">
-          <div class="event-row"><span class="event-icon down">↓</span><span class="event-title">\${label}\${escHtml(durStr)}</span></div>
-          <div class="event-time">\${escHtml(fmtTime(ev.ts))}</div>
-          \${errorRow}
-        </div>\`;
-      }).join('') + '</div>';
+
+        if (ev.type === 'down') {
+          const upEv   = chron.find(e => e.type === 'up' && e.ts > ev.ts);
+          const dur    = upEv ? upEv.ts - ev.ts : null;
+          const durStr = dur && dur > 60 ? ' · ' + fmtDuration(dur) : '';
+          const label  = !upEv ? 'Currently down' : 'Down';
+          const errorRow = ev.error ? \`<div class="event-error">\${escHtml(ev.error)}</div>\` : '';
+          return \`<div class="event-item">
+            <div class="event-row"><span class="event-icon down">↓</span><span class="event-title">\${escHtml(label + durStr)}</span></div>
+            <div class="event-time">\${escHtml(fmtTime(ev.ts))}</div>
+            \${errorRow}
+          </div>\`;
+        }
+
+        if (ev.type === 'maintenance_start') {
+          const msgRow = ev.message ? \`<div class="event-error">\${escHtml(ev.message)}</div>\` : '';
+          return \`<div class="event-item">
+            <div class="event-row"><span class="event-icon maintenance">M</span><span class="event-title">Maintenance started</span></div>
+            <div class="event-time">\${escHtml(fmtTime(ev.ts))}</div>
+            \${msgRow}
+          </div>\`;
+        }
+
+        if (ev.type === 'maintenance_end') {
+          return \`<div class="event-item">
+            <div class="event-row"><span class="event-icon maintenance">M</span><span class="event-title">Maintenance ended</span></div>
+            <div class="event-time">\${escHtml(fmtTime(ev.ts))}</div>
+          </div>\`;
+        }
+
+        return '';
+      });
+
+      return '<div class="events-list">' + items.join('') + '</div>';
     }
 
     // ── Render list view ──────────────────────────────────────────────────
@@ -753,12 +748,12 @@ export function getPage() {
       document.getElementById('detail-chart').innerHTML = chart.html;
       attachChartTooltip(document.getElementById('detail-chart').querySelector('svg'), chart.pts);
 
-      // Fetch raw results only for recent events
+      // Fetch pre-computed events for recent events section
       try {
         const res = await fetch(\`/api/monitor/\${encodeURIComponent(monitorId)}\`);
         if (!res.ok) throw new Error('HTTP ' + res.status);
-        const results = await res.json();
-        document.getElementById('detail-events').innerHTML = buildRecentEvents(results);
+        const events = await res.json();
+        document.getElementById('detail-events').innerHTML = renderEvents(events);
       } catch (err) {
         document.getElementById('detail-events').innerHTML = '<p style="color:var(--muted)">Failed to load events.</p>';
       }
