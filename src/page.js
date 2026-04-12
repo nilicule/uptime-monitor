@@ -416,9 +416,10 @@ export function getPage() {
       const byDay = {};
       for (const b of barsArray) {
         const day = b.hour.slice(0, 10);
-        if (!byDay[day]) byDay[day] = { ok: 0, total: 0 };
-        byDay[day].ok    += b.ok;
-        byDay[day].total += b.total;
+        if (!byDay[day]) byDay[day] = { ok: 0, total: 0, maintenance: 0 };
+        byDay[day].ok          += b.ok;
+        byDay[day].total       += b.total;
+        byDay[day].maintenance += (b.maintenance || 0);
       }
       const now = Date.now();
       const todayStart = new Date(now);
@@ -433,9 +434,10 @@ export function getPage() {
     }
 
     function barClass(slot) {
-      if (!slot || slot.total === 0) return 'nodata';
-      if (slot.ok === slot.total)    return 'ok';
-      if (slot.ok === 0)             return 'down';
+      if (!slot || slot.total === 0)  return 'nodata';
+      if (slot.maintenance > 0)       return 'maintenance';
+      if (slot.ok === slot.total)     return 'ok';
+      if (slot.ok === 0)              return 'down';
       return 'partial';
     }
 
@@ -452,7 +454,9 @@ export function getPage() {
         const dateStr   = dayDate.toISOString().slice(0, 10);
         const valueStr  = !slot || slot.total === 0
           ? 'No data'
-          : (slot.ok / slot.total * 100).toFixed(2) + '%';
+          : slot.maintenance > 0
+            ? 'Maintenance'
+            : (slot.ok / slot.total * 100).toFixed(2) + '%';
 
         bar.addEventListener('mouseenter', (e) => {
           document.getElementById('tip-date').textContent  = dateStr;
