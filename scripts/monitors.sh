@@ -40,6 +40,22 @@ slugify() {
   echo "$1" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g' | sed 's/-\+/-/g' | sed 's/^-\|-$//g'
 }
 
+parse_duration() {
+  local input="$1"
+  local value="${input%[mhd]}"
+  local unit="${input: -1}"
+  if ! [[ "$value" =~ ^[0-9]+$ ]]; then
+    echo "Error: invalid duration '$input'. Use format: 30m, 2h, 1d" >&2
+    exit 1
+  fi
+  case "$unit" in
+    m) echo $((value * 60)) ;;
+    h) echo $((value * 3600)) ;;
+    d) echo $((value * 86400)) ;;
+    *) echo "Error: invalid duration unit in '$input'. Use m, h, or d." >&2; exit 1 ;;
+  esac
+}
+
 # ─── Subcommands ──────────────────────────────────────────────────────────────
 
 cmd_list() {
@@ -174,20 +190,191 @@ cmd_remove() {
   echo "Monitor '$ENTRY_NAME' removed successfully."
 }
 
+cmd_maintenance() {
+  check_deps
+  local SUB="${1:-}"
+  shift || true
+
+  case "$SUB" in
+    on)
+      local ID="${1:-}"
+      if [[ -z "$ID" ]]; then
+        echo "Usage: $0 maintenance on <id> [duration] [message]" >&2
+        exit 1
+      fi
+      local DURATION="${2:-}"
+      local MESSAGE="${3:-}"
+
+      local NOW
+      NOW=$(date +%s)
+      local EXPIRES_AT="null"
+
+      if [[ -n "$DURATION" ]]; then
+        local SECS
+        SECS=$(parse_duration "$DURATION")
+        EXPIRES_AT=$((NOW + SECS))
+      fi
+
+      local MAINT_JSON
+      MAINT_JSON=$(jq -n \
+        --argjson active true \
+        --arg message "$MESSAGE" \
+        --argjson startedAt "$NOW" \
+        --argjson expiresAt "$EXPIRES_AT" \
+        '{active: $active, message: (if $message == "" then null else $message end), startedAt: $startedAt, expiresAt: $expiresAt}')
+
+      echo "$MAINT_JSON" | wrangler kv key put --binding=UPTIME_KV --remote "maintenance:${ID}" --stdin
+
+      # Append maintenance_start event immediately
+      local CUTOFF=$((NOW - 90 * 24 * 3600))
+      local EXISTING_EVENTS
+      EXISTING_EVENTS=$(wrangler kv key get --binding=UPTIME_KV --remote "events:${ID}" 2>/dev/null) || EXISTING_EVENTS="[]"
+      if ! echo "$EXISTING_EVENTS" | jq -e . >/dev/null 2>&1; then
+        EXISTING_EVENTS="[]"
+      fi
+
+      local NEW_EVENT
+      NEW_EVENT=$(jq -n \
+        --arg type "maintenance_start" \
+        --argjson ts "$NOW" \
+        --arg message "$MESSAGE" \
+        '{type: $type, ts: $ts, message: (if $message == "" then null else $message end)}')
+
+      local UPDATED_EVENTS
+      UPDATED_EVENTS=$(echo "$EXISTING_EVENTS" | jq \
+        --argjson cutoff "$CUTOFF" \
+        --argjson event "$NEW_EVENT" \
+        '[.[] | select(.ts >= $cutoff)] + [$event]')
+
+      echo "$UPDATED_EVENTS" | wrangler kv key put --binding=UPTIME_KV --remote "events:${ID}" --stdin
+
+      echo ""
+      echo "Maintenance mode enabled for '$ID'."
+      if [[ -n "$DURATION" ]]; then
+        echo "Expires in: $DURATION"
+      else
+        echo "No expiry set. Use 'maintenance off $ID' to disable."
+      fi
+      ;;
+
+    off)
+      local ID="${1:-}"
+      if [[ -z "$ID" ]]; then
+        echo "Usage: $0 maintenance off <id>" >&2
+        exit 1
+      fi
+
+      wrangler kv key delete --binding=UPTIME_KV --remote "maintenance:${ID}"
+
+      echo ""
+      echo "Maintenance mode disabled for '$ID'."
+      echo "A 'maintenance_end' event will appear after the next check cycle (≤5 min)."
+      ;;
+
+    extend)
+      local ID="${1:-}"
+      local DURATION="${2:-}"
+      if [[ -z "$ID" ]] || [[ -z "$DURATION" ]]; then
+        echo "Usage: $0 maintenance extend <id> <duration>" >&2
+        exit 1
+      fi
+
+      local SECS
+      SECS=$(parse_duration "$DURATION")
+
+      local NOW
+      NOW=$(date +%s)
+
+      local EXISTING
+      EXISTING=$(wrangler kv key get --binding=UPTIME_KV --remote "maintenance:${ID}" 2>/dev/null) || EXISTING=""
+
+      if [[ -z "$EXISTING" ]] || ! echo "$EXISTING" | jq -e '.active == true' >/dev/null 2>&1; then
+        echo "Error: no active maintenance mode found for '$ID'" >&2
+        exit 1
+      fi
+
+      local CURRENT_EXPIRES
+      CURRENT_EXPIRES=$(echo "$EXISTING" | jq '.expiresAt')
+
+      local NEW_EXPIRES
+      if [[ "$CURRENT_EXPIRES" == "null" ]]; then
+        NEW_EXPIRES=$((NOW + SECS))
+      else
+        NEW_EXPIRES=$((CURRENT_EXPIRES + SECS))
+      fi
+
+      local UPDATED
+      UPDATED=$(echo "$EXISTING" | jq --argjson expires "$NEW_EXPIRES" '.expiresAt = $expires')
+
+      echo "$UPDATED" | wrangler kv key put --binding=UPTIME_KV --remote "maintenance:${ID}" --stdin
+
+      echo ""
+      echo "Maintenance window extended for '$ID'."
+      # macOS uses -r, Linux uses -d
+      echo "New expiry: $(date -r "$NEW_EXPIRES" 2>/dev/null || date -d "@$NEW_EXPIRES" 2>/dev/null || echo "timestamp $NEW_EXPIRES")"
+      ;;
+
+    status)
+      local ID="${1:-}"
+      local MONITORS
+      MONITORS=$(get_config)
+
+      echo ""
+      if [[ -n "$ID" ]]; then
+        local DATA
+        DATA=$(wrangler kv key get --binding=UPTIME_KV --remote "maintenance:${ID}" 2>/dev/null) || DATA=""
+        echo "Maintenance status for '$ID':"
+        if [[ -z "$DATA" ]] || ! echo "$DATA" | jq -e '.active == true' >/dev/null 2>&1; then
+          echo "  Not in maintenance"
+        else
+          echo "$DATA" | jq .
+        fi
+      else
+        echo "Maintenance status for all monitors:"
+        echo ""
+        while IFS= read -r mid; do
+          local DATA NAME
+          DATA=$(wrangler kv key get --binding=UPTIME_KV --remote "maintenance:${mid}" 2>/dev/null) || DATA=""
+          NAME=$(echo "$MONITORS" | jq -r --arg id "$mid" '.[] | select(.id == $id) | .name')
+          if [[ -z "$DATA" ]] || ! echo "$DATA" | jq -e '.active == true' >/dev/null 2>&1; then
+            echo "  $NAME ($mid): operational"
+          else
+            local MSG
+            MSG=$(echo "$DATA" | jq -r '.message // "(no message)"')
+            echo "  $NAME ($mid): MAINTENANCE — $MSG"
+          fi
+        done < <(echo "$MONITORS" | jq -r '.[].id')
+      fi
+      ;;
+
+    *)
+      echo "Usage: $0 maintenance <on|off|extend|status>"
+      echo ""
+      echo "  on <id> [duration] [message]  — enable maintenance (e.g. 2h, 30m, 1d)"
+      echo "  off <id>                      — disable maintenance"
+      echo "  extend <id> <duration>        — extend active maintenance window"
+      echo "  status [id]                   — show maintenance state"
+      exit 1
+      ;;
+  esac
+}
+
 # ─── Entry point ──────────────────────────────────────────────────────────────
 
 SUBCOMMAND="${1:-}"
 
 case "$SUBCOMMAND" in
-  list)   cmd_list ;;
-  add)    cmd_add ;;
-  remove) cmd_remove ;;
+  list)        cmd_list ;;
+  add)         cmd_add ;;
+  remove)      cmd_remove ;;
+  maintenance) cmd_maintenance "$@" ;;
   *)
-    echo "Usage: $0 <list|add|remove>"
+    echo "Usage: $0 <list|add|remove|maintenance>"
     echo ""
-    echo "  list    — print current monitors from KV"
-    echo "  add     — interactively add a new monitor"
-    echo "  remove  — interactively remove a monitor"
+    echo "  list        — print current monitors from KV"
+    echo "  add         — interactively add a new monitor"
+    echo "  remove      — interactively remove a monitor"
+    echo "  maintenance — manage maintenance mode"
     exit 1
     ;;
 esac
