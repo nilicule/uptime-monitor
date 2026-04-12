@@ -3,6 +3,7 @@
 A self-hosted uptime monitor that runs entirely on Cloudflare's free tier. It checks HTTP endpoints and TCP ports every 5 minutes and serves a live status page.
 
 ![Status page screenshot showing monitors with uptime bars](docs/screenshot.png)
+![Status page screenshot showing detail page](docs/screenshot_detail.png)
 
 ## What it does
 
