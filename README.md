@@ -30,7 +30,7 @@ If you haven't used Workers before:
 
 No paid plan required. The free tier includes 100,000 Worker requests/day and 1 GB of KV storage.
 
-**KV write quota:** The free tier allows 1,000 KV write operations per day. Each check writes 2 keys per monitor (`latest:{id}` and the hourly `summary` bucket) plus 1 for the dashboard snapshot. At the default 5-minute interval that works out to roughly 865 writes/day for 1 monitor, or 1,153 for 2. If you're running more monitors or approaching the limit, increase the cron interval in `wrangler.toml` (e.g. `*/10 * * * *` for every 10 minutes).
+**KV write quota:** The free tier allows 1,000 KV write operations per day. Each check writes 2 keys per monitor plus 1 for the dashboard snapshot. At the default 5-minute interval that works out to roughly 865 writes/day for 1 monitor, or 1,153 for 2. If you're running more monitors or approaching the limit, increase the cron interval in `wrangler.toml` (e.g. `*/10 * * * *` for every 10 minutes).
 
 ## Deploy
 
