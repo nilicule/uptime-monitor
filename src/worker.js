@@ -1,4 +1,5 @@
 import { checkHttp, checkTcp } from "./checks.js";
+import { getPage } from "./page.js";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -271,6 +272,12 @@ async function handleFetch(request, env) {
 
     return new Response(JSON.stringify(results.filter(Boolean)), {
       headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  if (pathname === "/") {
+    return new Response(getPage(), {
+      headers: { "Content-Type": "text/html; charset=utf-8" },
     });
   }
 
