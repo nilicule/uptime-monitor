@@ -240,8 +240,10 @@ async function buildSnapshot(kv, monitors) {
       for (const { ts, data } of buckets) {
         if (!data || ts < cutoff90d) continue;
 
-        const m   = data.maintenance   || 0;
-        const mOk = data.maintenanceOk || 0;
+        const m              = data.maintenance   || 0;
+        const mOk            = data.maintenanceOk || 0;
+        const effectiveTotal = Math.max(0, data.checks - m);
+        const effectiveOk    = Math.max(0, data.ok - mOk);
 
         bars.push({
           hour:        new Date(ts * 1000).toISOString(),
@@ -251,10 +253,10 @@ async function buildSnapshot(kv, monitors) {
           avgMs:       data.avgMs,
         });
 
-        checks90 += data.checks - m; ok90 += data.ok - mOk;
-        if (ts >= cutoff30d) { checks30 += data.checks - m; ok30 += data.ok - mOk; }
-        if (ts >= cutoff7d)  { checks7  += data.checks - m; ok7  += data.ok - mOk; totalMs7 += data.avgMs * (data.checks - m); }
-        if (ts >= cutoff24h) { checks24 += data.checks - m; ok24 += data.ok - mOk; }
+        checks90 += effectiveTotal; ok90 += effectiveOk;
+        if (ts >= cutoff30d) { checks30 += effectiveTotal; ok30 += effectiveOk; }
+        if (ts >= cutoff7d)  { checks7  += effectiveTotal; ok7  += effectiveOk; totalMs7 += data.avgMs * effectiveTotal; }
+        if (ts >= cutoff24h) { checks24 += effectiveTotal; ok24 += effectiveOk; }
       }
 
       bars.sort((a, b) => a.hour.localeCompare(b.hour));
