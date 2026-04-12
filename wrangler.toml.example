@@ -1,0 +1,12 @@
+name = "uptime-monitor"
+main = "src/worker.js"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+
+[triggers]
+crons = ["*/5 * * * *"]
+
+[[kv_namespaces]]
+binding = "UPTIME_KV"
+id = "placeholder"
+preview_id = "placeholder"
