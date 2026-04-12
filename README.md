@@ -67,6 +67,10 @@ Your status page will be live at `https://uptime-monitor.<your-subdomain>.worker
 ./scripts/monitors.sh remove   # Remove a monitor interactively
 ```
 
+## License
+
+[CC BY-NC 4.0](LICENSE) — free to use and modify, attribution required, no commercial use.
+
 ## Further reading
 
 See [docs/reference.md](docs/reference.md) for the KV data model, API endpoints, local development setup, and troubleshooting.
