@@ -303,14 +303,12 @@ async function handleFetch(request, env, ctx) {
   }
 
   if (pathname === "/") {
-    return cachedFetch(request, ctx, async () =>
-      new Response(getPage(), {
-        headers: {
-          "Content-Type": "text/html; charset=utf-8",
-          "Cache-Control": "public, max-age=3600, s-maxage=3600",
-        },
-      })
-    );
+    return new Response(getPage(), {
+      headers: {
+        "Content-Type": "text/html; charset=utf-8",
+        "Cache-Control": "no-store",
+      },
+    });
   }
 
   return new Response("Not Found", {
