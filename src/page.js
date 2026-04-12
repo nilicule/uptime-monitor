@@ -641,8 +641,8 @@ export function getPage() {
 
     // ── Render list view ──────────────────────────────────────────────────
     function renderList(snapshot) {
-      const allOk  = snapshot.monitors.every(m => m.latest && m.latest.ok);
-      const anyDown = snapshot.monitors.some(m => m.latest && !m.latest.ok);
+      const allOk   = snapshot.monitors.every(m => m.latest && (m.latest.ok || m.maintenance?.active));
+      const anyDown = snapshot.monitors.some(m => m.latest && !m.latest.ok && !m.maintenance?.active);
       const anyData = snapshot.monitors.some(m => m.latest);
 
       const dot        = document.getElementById('banner-dot');
@@ -655,7 +655,7 @@ export function getPage() {
       } else if (allOk) {
         bannerText.innerHTML = 'All systems <span>Operational</span>';
       } else {
-        const n = snapshot.monitors.filter(m => m.latest && !m.latest.ok).length;
+        const n = snapshot.monitors.filter(m => m.latest && !m.latest.ok && !m.maintenance?.active).length;
         bannerText.innerHTML = \`<span class="down">\${n} service\${n !== 1 ? 's' : ''} down</span>\`;
       }
 
@@ -663,18 +663,20 @@ export function getPage() {
       list.innerHTML = '';
 
       for (const monitor of snapshot.monitors) {
-        const slots      = buildDailySlots(monitor.bars);
-        const uptime     = monitor.uptime90d != null ? monitor.uptime90d.toFixed(2) + '%' : '—';
-        const isOk       = monitor.latest?.ok;
-        const statusClass = monitor.latest == null ? 'unknown' : isOk ? 'ok' : 'down';
-        const statusLabel = monitor.latest == null ? 'No data' : isOk ? 'Operational' : 'Down';
+        const slots       = buildDailySlots(monitor.bars);
+        const uptime      = monitor.uptime90d != null ? monitor.uptime90d.toFixed(2) + '%' : '—';
+        const isMaint     = !!monitor.maintenance?.active;
+        const isOk        = monitor.latest?.ok;
+        const statusClass = monitor.latest == null ? 'unknown' : isMaint ? 'maintenance' : isOk ? 'ok' : 'down';
+        const statusLabel = monitor.latest == null ? 'No data' : isMaint ? 'Maintenance' : isOk ? 'Operational' : 'Down';
+        const maintBadge  = isMaint ? '<span class="maintenance-badge">Maintenance</span>' : '';
 
         const card = document.createElement('div');
         card.className = 'monitor';
         card.innerHTML = \`
           <div class="monitor-header">
             <div class="monitor-name">
-              <a href="#monitor/\${escHtml(monitor.id)}">\${escHtml(monitor.name)}</a>
+              <a href="#monitor/\${escHtml(monitor.id)}">\${escHtml(monitor.name)}</a>\${maintBadge}
               <span class="monitor-uptime">· \${escHtml(uptime)}</span>
             </div>
             <div class="monitor-status \${escHtml(statusClass)}">
@@ -803,8 +805,8 @@ export function getPage() {
       document.getElementById('last-updated').textContent = 'Last updated ' + genAt.toLocaleTimeString();
       nextRefreshAt = Date.now() + REFRESH_MS;
 
-      const allOk  = snapshot.monitors.every(m => m.latest && m.latest.ok);
-      const allDown = snapshot.monitors.every(m => m.latest && !m.latest.ok);
+      const allOk   = snapshot.monitors.every(m => m.latest && (m.latest.ok || m.maintenance?.active));
+      const allDown = snapshot.monitors.every(m => m.latest && !m.latest.ok && !m.maintenance?.active);
       setFavicon(allOk ? '#22c55e' : allDown ? '#ef4444' : '#f59e0b');
 
       navigate();
