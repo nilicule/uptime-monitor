@@ -790,7 +790,7 @@ export function getPage() {
 
       const genAt = new Date(snapshot.generatedAt * 1000);
       document.getElementById('last-updated').textContent = 'Last updated ' + genAt.toLocaleTimeString();
-      nextRefreshAt = Date.now() + REFRESH_MS;
+      nextRefreshAt = (snapshot.generatedAt + 5 * 60) * 1000;
 
       const allOk   = snapshot.monitors.every(m => m.latest && (m.latest.ok || m.maintenance?.active));
       const allDown = snapshot.monitors.every(m => m.latest && !m.latest.ok && !m.maintenance?.active);
