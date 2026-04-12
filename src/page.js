@@ -150,7 +150,6 @@ export function getPage() {
 
   <script>
     const REFRESH_MS = 5 * 60 * 1000;
-    const HOURS_90 = 90 * 24;
 
     let nextRefreshAt = null;
 
@@ -163,27 +162,34 @@ export function getPage() {
         .replace(/"/g, '&quot;');
     }
 
-    // ── Build the full 90-day hour slot list ──────────────────────────────
-    function buildSlots(barsArray) {
-      // Index bars by their hour string for O(1) lookup
-      const byHour = {};
-      for (const b of barsArray) byHour[b.hour] = b;
+    // ── Build 90 daily bars from hourly bars array ────────────────────────
+    // Groups hourly buckets by UTC day. Always returns exactly 90 entries
+    // (oldest → newest), with null for days that have no data yet.
+    function buildDailySlots(barsArray) {
+      // Aggregate hourly bars into daily buckets keyed by "YYYY-MM-DD"
+      const byDay = {};
+      for (const b of barsArray) {
+        const day = b.hour.slice(0, 10); // "YYYY-MM-DD"
+        if (!byDay[day]) byDay[day] = { ok: 0, total: 0 };
+        byDay[day].ok += b.ok;
+        byDay[day].total += b.total;
+      }
 
+      // Generate the last 90 calendar days (UTC), oldest first
       const now = Date.now();
-      // Start of the current hour
-      const currentHour = new Date(now);
-      currentHour.setUTCMinutes(0, 0, 0);
+      const todayStart = new Date(now);
+      todayStart.setUTCHours(0, 0, 0, 0);
 
       const slots = [];
-      for (let i = HOURS_90 - 1; i >= 0; i--) {
-        const slotTime = new Date(currentHour.getTime() - i * 3600 * 1000);
-        const key = slotTime.toISOString();
-        slots.push(byHour[key] || null);
+      for (let i = 89; i >= 0; i--) {
+        const dayTime = new Date(todayStart.getTime() - i * 24 * 3600 * 1000);
+        const key = dayTime.toISOString().slice(0, 10);
+        slots.push(byDay[key] || null);
       }
-      return slots; // oldest → newest
+      return slots; // 90 entries, oldest → newest
     }
 
-    // ── Bar class from slot data ──────────────────────────────────────────
+    // ── Bar class from aggregated day data ────────────────────────────────
     function barClass(slot) {
       if (!slot || slot.total === 0) return 'nodata';
       if (slot.ok === slot.total) return 'ok';
@@ -216,7 +222,7 @@ export function getPage() {
       const list = document.getElementById('monitor-list');
       list.innerHTML = '';
       for (const monitor of snapshot.monitors) {
-        const slots = buildSlots(monitor.bars);
+        const slots = buildDailySlots(monitor.bars);
         const uptime = monitor.uptime90d != null ? monitor.uptime90d.toFixed(2) + '%' : '—';
         const isOk = monitor.latest?.ok;
         const statusClass = monitor.latest == null ? 'unknown' : isOk ? 'ok' : 'down';
