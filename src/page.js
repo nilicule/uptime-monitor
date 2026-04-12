@@ -120,6 +120,7 @@ export function getPage() {
     }
     footer a { color: #64748b; text-decoration: none; }
     footer a:hover { color: #94a3b8; }
+    footer:hover .heart { color: #ef4444; }
   </style>
 </head>
 <body>
@@ -145,7 +146,7 @@ export function getPage() {
   </main>
 
   <footer>
-    <a href="https://github.com/nilicule/uptime-monitor" target="_blank" rel="noopener">View source on GitHub</a>
+    built with <span class="heart">♥</span> · <a href="https://github.com/nilicule/uptime-monitor" target="_blank" rel="noopener">source on GitHub</a>
   </footer>
 
   <script>
