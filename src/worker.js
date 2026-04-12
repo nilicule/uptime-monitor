@@ -95,12 +95,16 @@ async function runCheck(monitor) {
 const TTL_1H = 60 * 60;
 const TTL_90D = 90 * 24 * 60 * 60;
 
-/** Read maintenance:{id} and return the state object if active and not expired, else null. */
+/** Read maintenance:{id} and return the state object if active and not expired, else null.
+ *  Deletes the KV key if the maintenance window has expired. */
 async function getMaintenanceState(kv, id) {
   const data = await kv.get(`maintenance:${id}`, "json");
   if (!data || !data.active) return null;
   const now = Math.floor(Date.now() / 1000);
-  if (data.expiresAt !== null && now > data.expiresAt) return null;
+  if (data.expiresAt !== null && now > data.expiresAt) {
+    await kv.delete(`maintenance:${id}`);
+    return null;
+  }
   return data;
 }
 
@@ -113,7 +117,7 @@ async function appendEvent(kv, id, event) {
   await kv.put(`events:${id}`, JSON.stringify(pruned), { expirationTtl: TTL_90D });
 }
 
-async function writeResult(kv, result, prevResult, maintenance) {
+async function writeResult(kv, result, maintenance) {
   // Tag the result with current maintenance state
   result = { ...result, maintenance: !!maintenance };
   const value = JSON.stringify(result);
@@ -152,7 +156,7 @@ async function writeResult(kv, result, prevResult, maintenance) {
  * Compare previous and current check state, write events on transitions.
  * maintenance_start is written by the CLI; the worker only writes maintenance_end.
  */
-async function detectAndWriteEvents(kv, result, prevResult, maintenance) {
+async function detectAndWriteEvents(kv, result, prevResult) {
   const events = [];
   const now = result.ts;
 
@@ -174,6 +178,7 @@ async function detectAndWriteEvents(kv, result, prevResult, maintenance) {
     }
   }
 
+  // Sequential: appendEvent does read-modify-write on the same key; must not run in parallel.
   for (const event of events) {
     await appendEvent(kv, result.id, event);
   }
@@ -184,25 +189,14 @@ async function detectAndWriteEvents(kv, result, prevResult, maintenance) {
  * execute check, write result and events.
  */
 async function runMonitor(kv, monitor) {
-  const [prevResult, maintenanceRaw] = await Promise.all([
+  const [prevResult, maintenance] = await Promise.all([
     kv.get(`latest:${monitor.id}`, "json"),
-    kv.get(`maintenance:${monitor.id}`, "json"),
+    getMaintenanceState(kv, monitor.id),
   ]);
 
-  // Resolve effective maintenance state; clean up if expired
-  let maintenance = null;
-  if (maintenanceRaw && maintenanceRaw.active) {
-    const now = Math.floor(Date.now() / 1000);
-    if (maintenanceRaw.expiresAt === null || now <= maintenanceRaw.expiresAt) {
-      maintenance = maintenanceRaw;
-    } else {
-      await kv.delete(`maintenance:${monitor.id}`);
-    }
-  }
-
   const result = await runCheck(monitor);
-  await writeResult(kv, result, prevResult, maintenance);
-  await detectAndWriteEvents(kv, result, prevResult, maintenance);
+  await writeResult(kv, result, maintenance);
+  await detectAndWriteEvents(kv, result, prevResult);
   return result;
 }
 
