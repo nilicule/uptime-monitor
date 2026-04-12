@@ -22,7 +22,7 @@ A self-hosted uptime monitor that runs entirely on Cloudflare's free tier. It ch
 If you haven't used Workers before:
 
 1. Sign up at [dash.cloudflare.com](https://dash.cloudflare.com)
-2. Install Wrangler: `npm install -g wrangler`
+2. Install Wrangler: `npm install -g wrangler` or `brew install cloudflare-wrangler`
 3. Log in: `wrangler login`
 
 No paid plan required. The free tier includes 100,000 Worker requests/day and 1 GB of KV storage.
