@@ -22,7 +22,12 @@ export function getPage() {
     header {
       background: #0f172a;
       border-bottom: 1px solid #1e293b;
-      padding: 16px 32px;
+      padding: 16px 24px;
+    }
+    .header-inner {
+      max-width: 860px;
+      width: 100%;
+      margin: 0 auto;
       display: flex;
       justify-content: space-between;
       align-items: center;
@@ -152,10 +157,12 @@ export function getPage() {
 </head>
 <body>
   <header>
-    <h1>Status page</h1>
-    <div id="meta">
-      <div id="last-updated">Loading…</div>
-      <div id="next-update"></div>
+    <div class="header-inner">
+      <h1>Status page</h1>
+      <div id="meta">
+        <div id="last-updated">Loading…</div>
+        <div id="next-update"></div>
+      </div>
     </div>
   </header>
 
