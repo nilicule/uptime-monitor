@@ -68,6 +68,30 @@ Your status page will be live at `https://uptime-monitor.<your-subdomain>.worker
 ./scripts/monitors.sh remove   # Remove a monitor interactively
 ```
 
+## Maintenance mode
+
+Put a monitor in maintenance mode to suppress downtime alerts and exclude the period from uptime calculations.
+
+```bash
+./scripts/monitors.sh maintenance on <id>               # indefinite
+./scripts/monitors.sh maintenance on <id> 2h            # expires in 2 hours
+./scripts/monitors.sh maintenance on <id> 2h "Upgrade"  # with message
+
+./scripts/monitors.sh maintenance off <id>              # disable immediately
+./scripts/monitors.sh maintenance extend <id> 1h        # extend by 1 hour
+./scripts/monitors.sh maintenance status                # show all monitors
+./scripts/monitors.sh maintenance status <id>           # show one monitor
+```
+
+While in maintenance:
+- The dashboard shows a blue **Maintenance** badge on the monitor card
+- The detail page shows a blue "in maintenance" banner with the optional message
+- Uptime bars for the maintenance period are shown in blue
+- The period is excluded from all uptime percentage calculations
+- Checks still run — state changes (up/down) are still recorded in the event log
+
+Duration format: `30m` (minutes), `2h` (hours), `1d` (days).
+
 ## License
 
 [CC BY-NC 4.0](LICENSE) — free to use and modify, attribution required, no commercial use.

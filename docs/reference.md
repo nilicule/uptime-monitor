@@ -33,8 +33,45 @@ uptime-monitor/
 | `summary:{id}:{YYYY-MM-DD-HH}` | 90 days | Hourly aggregate bucket |
 | `dashboard:snapshot` | none | Pre-built payload for the status page |
 | `config:monitors` | none | Readable mirror of `MONITORS_CONFIG` secret |
+| `maintenance:{id}` | none | Active maintenance state per monitor |
+| `events:{id}` | 90 days | Rolling log of state transition events |
 
 `dashboard:snapshot` is rebuilt on every cron run. The status page reads only this one key per page load regardless of how many monitors are configured.
+
+### `maintenance:{id}` structure
+
+```json
+{ "active": true, "message": "Deploying v2", "startedAt": 1744444800, "expiresAt": 1744452000 }
+```
+
+`expiresAt` is `null` for indefinite maintenance. Written by the CLI; read by the worker before each check. The worker clears this key when it detects expiry.
+
+### `events:{id}` structure
+
+A JSON array of state transition events, newest appended last. Only transitions are stored (not every check result).
+
+```json
+[
+  { "type": "maintenance_start", "ts": 1744444800, "message": "Deploying v2" },
+  { "type": "down",              "ts": 1744448400, "error": "connection refused" },
+  { "type": "up",                "ts": 1744450200 },
+  { "type": "maintenance_end",   "ts": 1744452000 }
+]
+```
+
+Event types: `down`, `up`, `maintenance_start`, `maintenance_end`. Entries older than 90 days are pruned on each write.
+
+`maintenance_start` is written immediately by the CLI (`maintenance on`). `maintenance_end` is written by the worker on the next check cycle after maintenance is disabled (≤5 min delay).
+
+### Updated summary bucket structure
+
+Hourly summary buckets (`summary:{id}:{YYYY-MM-DD-HH}`) now include `maintenance` and `maintenanceOk` counts:
+
+```json
+{ "checks": 12, "ok": 10, "maintenance": 2, "maintenanceOk": 2, "avgMs": 145, "minMs": 120, "maxMs": 210 }
+```
+
+Uptime % is calculated as `(ok - maintenanceOk) / (checks - maintenance)`.
 
 ## HTTP API
 
@@ -43,7 +80,7 @@ uptime-monitor/
 | `GET /` | Status page |
 | `GET /healthz` | Returns `200 OK` |
 | `GET /api/snapshot` | Returns the full `dashboard:snapshot` payload |
-| `GET /api/monitor/:id` | Returns raw check results for the last 24 hours |
+| `GET /api/monitor/:id` | Returns the pre-computed event log for the last 90 days |
 
 ## Monitor configuration
 
