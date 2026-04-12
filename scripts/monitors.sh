@@ -42,17 +42,16 @@ slugify() {
 
 parse_duration() {
   local input="$1"
-  local value="${input%[mhd]}"
-  local unit="${input: -1}"
-  if ! [[ "$value" =~ ^[0-9]+$ ]]; then
+  if ! [[ "$input" =~ ^([0-9]+)([mhd])$ ]]; then
     echo "Error: invalid duration '$input'. Use format: 30m, 2h, 1d" >&2
     exit 1
   fi
+  local value="${BASH_REMATCH[1]}"
+  local unit="${BASH_REMATCH[2]}"
   case "$unit" in
     m) echo $((value * 60)) ;;
     h) echo $((value * 3600)) ;;
     d) echo $((value * 86400)) ;;
-    *) echo "Error: invalid duration unit in '$input'. Use m, h, or d." >&2; exit 1 ;;
   esac
 }
 
@@ -294,10 +293,10 @@ cmd_maintenance() {
       fi
 
       local CURRENT_EXPIRES
-      CURRENT_EXPIRES=$(echo "$EXISTING" | jq '.expiresAt')
+      CURRENT_EXPIRES=$(echo "$EXISTING" | jq 'if .expiresAt == null then empty else .expiresAt | floor end') || CURRENT_EXPIRES=""
 
       local NEW_EXPIRES
-      if [[ "$CURRENT_EXPIRES" == "null" ]]; then
+      if [[ -z "$CURRENT_EXPIRES" ]]; then
         NEW_EXPIRES=$((NOW + SECS))
       else
         NEW_EXPIRES=$((CURRENT_EXPIRES + SECS))
