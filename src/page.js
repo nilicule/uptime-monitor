@@ -27,6 +27,8 @@ export function getPage() {
       --down-glow: rgba(239,68,68,.2);
       --partial:   #f59e0b;
       --tooltip-bg: #0f172a;
+      --tooltip-text: #f1f5f9;
+      --tooltip-muted: #94a3b8;
       --maintenance:      #3b82f6;
       --maintenance-bar:  #2563eb;
       --maintenance-glow: rgba(59,130,246,.2);
@@ -50,6 +52,8 @@ export function getPage() {
       --down-glow: rgba(220,38,38,.2);
       --partial:   #d97706;
       --tooltip-bg: #1e293b;
+      --tooltip-text: #f1f5f9;
+      --tooltip-muted: #94a3b8;
       --maintenance:      #2563eb;
       --maintenance-bar:  #2563eb;
       --maintenance-glow: rgba(37,99,235,.2);
@@ -211,8 +215,8 @@ export function getPage() {
       white-space: nowrap;
     }
     #bar-tooltip.visible { opacity: 1; }
-    #bar-tooltip .tip-date  { color: var(--muted); font-size: 11px; margin-bottom: 2px; }
-    #bar-tooltip .tip-value { color: var(--text); font-size: 15px; font-weight: 600; }
+    #bar-tooltip .tip-date  { color: var(--tooltip-muted); font-size: 11px; margin-bottom: 2px; }
+    #bar-tooltip .tip-value { color: var(--tooltip-text); font-size: 15px; font-weight: 600; }
     #bar-tooltip::after {
       content: '';
       position: absolute;
