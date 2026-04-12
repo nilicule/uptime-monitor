@@ -245,7 +245,7 @@ cmd_maintenance() {
         --argjson event "$NEW_EVENT" \
         '[.[] | select(.ts >= $cutoff)] + [$event]')
 
-      echo "$UPDATED_EVENTS" | wrangler kv key put --binding=UPTIME_KV --remote "events:${ID}" --stdin
+      echo "$UPDATED_EVENTS" | wrangler kv key put --binding=UPTIME_KV --remote "events:${ID}" --expiration-ttl=7776000 --stdin
 
       echo ""
       echo "Maintenance mode enabled for '$ID'."
