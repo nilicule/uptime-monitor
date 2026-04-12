@@ -106,7 +106,7 @@ async function getMaintenanceState(kv, id) {
 
 /** Append an event to events:{id}, pruning entries older than 90 days. */
 async function appendEvent(kv, id, event) {
-  const cutoff90d = Math.floor(Date.now() / 1000) - 90 * 24 * 3600;
+  const cutoff90d = Math.floor(Date.now() / 1000) - TTL_90D;
   const existing = (await kv.get(`events:${id}`, "json")) || [];
   const pruned = existing.filter((e) => e.ts >= cutoff90d);
   pruned.push(event);
