@@ -113,7 +113,9 @@ async function appendEvent(kv, id, event) {
   await kv.put(`events:${id}`, JSON.stringify(pruned), { expirationTtl: TTL_90D });
 }
 
-async function writeResult(kv, result) {
+async function writeResult(kv, result, prevResult, maintenance) {
+  // Tag the result with current maintenance state
+  result = { ...result, maintenance: !!maintenance };
   const value = JSON.stringify(result);
 
   // latest:{id} — 1h TTL
@@ -127,11 +129,18 @@ async function writeResult(kv, result) {
   // summary:{id}:{YYYY-MM-DD-HH} — read-modify-write, 90d TTL
   const hk = `summary:${result.id}:${hourKey(result.ts)}`;
   const existing = await kv.get(hk, "json");
-  const bucket = existing || { checks: 0, ok: 0, avgMs: 0, minMs: Infinity, maxMs: 0 };
+  const bucket = existing || {
+    checks: 0, ok: 0, maintenance: 0, maintenanceOk: 0,
+    avgMs: 0, minMs: Infinity, maxMs: 0,
+  };
 
   const prevTotal = bucket.avgMs * bucket.checks;
   bucket.checks += 1;
   if (result.ok) bucket.ok += 1;
+  if (result.maintenance) {
+    bucket.maintenance = (bucket.maintenance || 0) + 1;
+    if (result.ok) bucket.maintenanceOk = (bucket.maintenanceOk || 0) + 1;
+  }
   bucket.avgMs = Math.round((prevTotal + result.ms) / bucket.checks);
   bucket.minMs = Math.min(bucket.minMs === Infinity ? result.ms : bucket.minMs, result.ms);
   bucket.maxMs = Math.max(bucket.maxMs, result.ms);
