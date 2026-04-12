@@ -228,71 +228,106 @@ async function handleScheduled(env) {
   console.log(`Check round complete. ${results.length} monitors checked.`);
 }
 
+// ─── Edge cache helper ────────────────────────────────────────────────────────
+
+// Cloudflare Workers are treated as dynamic origins — Cache-Control headers
+// alone do not activate the CDN cache. Using caches.default opts in explicitly.
+// Only 2xx responses are stored; errors/404s are served fresh every time.
+async function cachedFetch(request, ctx, handler) {
+  const cache = caches.default;
+  const cached = await cache.match(request);
+  if (cached) return cached;
+  const response = await handler();
+  if (response.ok) ctx.waitUntil(cache.put(request, response.clone()));
+  return response;
+}
+
 // ─── Fetch handler ─────────────────────────────────────────────────────────
 
-async function handleFetch(request, env) {
+async function handleFetch(request, env, ctx) {
   const url = new URL(request.url);
   const { pathname } = url;
 
   if (pathname === "/healthz") {
-    return new Response("OK", { status: 200 });
+    return new Response("OK", {
+      status: 200,
+      headers: { "Cache-Control": "no-store" },
+    });
   }
 
   if (pathname === "/api/snapshot") {
-    const snapshot = await env.UPTIME_KV.get("dashboard:snapshot");
-    if (!snapshot) {
-      return new Response(JSON.stringify({ error: "No snapshot yet" }), {
-        status: 404,
-        headers: { "Content-Type": "application/json" },
+    return cachedFetch(request, ctx, async () => {
+      const snapshot = await env.UPTIME_KV.get("dashboard:snapshot");
+      if (!snapshot) {
+        return new Response(JSON.stringify({ error: "No snapshot yet" }), {
+          status: 404,
+          headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
+        });
+      }
+      return new Response(snapshot, {
+        headers: {
+          "Content-Type": "application/json",
+          "Cache-Control": "public, max-age=300, s-maxage=300",
+        },
       });
-    }
-    return new Response(snapshot, {
-      headers: { "Content-Type": "application/json" },
     });
   }
 
   const monitorMatch = pathname.match(/^\/api\/monitor\/([^/]+)$/);
   if (monitorMatch) {
-    const id = monitorMatch[1];
-    const now = Math.floor(Date.now() / 1000);
-    const cutoff = now - 24 * 3600;
+    return cachedFetch(request, ctx, async () => {
+      const id = monitorMatch[1];
+      const now = Math.floor(Date.now() / 1000);
+      const cutoff = now - 24 * 3600;
 
-    const keys = await listAllKeys(env.UPTIME_KV, `result:${id}:`);
+      const keys = await listAllKeys(env.UPTIME_KV, `result:${id}:`);
 
-    // Filter to last 24h by timestamp embedded in key name: result:{id}:{ts}
-    const recentKeys = keys.filter((k) => {
-      const parts = k.name.split(":");
-      const ts = Number(parts[parts.length - 1]);
-      return ts >= cutoff;
-    });
+      // Filter to last 24h by timestamp embedded in key name: result:{id}:{ts}
+      const recentKeys = keys.filter((k) => {
+        const parts = k.name.split(":");
+        const ts = Number(parts[parts.length - 1]);
+        return ts >= cutoff;
+      });
 
-    const results = await Promise.all(
-      recentKeys.map((k) => env.UPTIME_KV.get(k.name, "json"))
-    );
+      const results = await Promise.all(
+        recentKeys.map((k) => env.UPTIME_KV.get(k.name, "json"))
+      );
 
-    return new Response(JSON.stringify(results.filter(Boolean)), {
-      headers: { "Content-Type": "application/json" },
+      return new Response(JSON.stringify(results.filter(Boolean)), {
+        headers: {
+          "Content-Type": "application/json",
+          "Cache-Control": "public, max-age=300, s-maxage=300",
+        },
+      });
     });
   }
 
   if (pathname === "/") {
-    return new Response(getPage(), {
-      headers: { "Content-Type": "text/html; charset=utf-8" },
-    });
+    return cachedFetch(request, ctx, async () =>
+      new Response(getPage(), {
+        headers: {
+          "Content-Type": "text/html; charset=utf-8",
+          "Cache-Control": "public, max-age=3600, s-maxage=3600",
+        },
+      })
+    );
   }
 
-  return new Response("Not Found", { status: 404 });
+  return new Response("Not Found", {
+    status: 404,
+    headers: { "Cache-Control": "no-store" },
+  });
 }
 
 // ─── Export ───────────────────────────────────────────────────────────────────
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     // Sync config mirror on cold start (only runs once per isolate lifetime)
     const monitors = parseConfig(env);
     if (monitors) await syncConfigMirrorOnce(env, monitors);
 
-    return handleFetch(request, env);
+    return handleFetch(request, env, ctx);
   },
 
   async scheduled(_event, env, ctx) {
