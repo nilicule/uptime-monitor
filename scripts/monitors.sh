@@ -367,7 +367,7 @@ case "$SUBCOMMAND" in
   list)        cmd_list ;;
   add)         cmd_add ;;
   remove)      cmd_remove ;;
-  maintenance) cmd_maintenance "$@" ;;
+  maintenance) shift; cmd_maintenance "$@" ;;
   *)
     echo "Usage: $0 <list|add|remove|maintenance>"
     echo ""
