@@ -1,5 +1,17 @@
 import { connect } from "cloudflare:sockets";
 
+// Returns TTFB (responseStart - requestStart) from the most recent resource
+// timing entry, which strips DNS/TCP/TLS overhead for a ping-like latency value.
+// Returns null if the timing data isn't available, signalling the caller to fall back.
+function getTtfb() {
+  const entries = performance.getEntriesByType("resource");
+  const entry = entries[entries.length - 1];
+  if (entry && entry.requestStart > 0 && entry.responseStart > 0) {
+    return Math.round(entry.responseStart - entry.requestStart);
+  }
+  return null;
+}
+
 /**
  * Perform an HTTP HEAD check against a monitor.
  * @param {{ id: string, name: string, url: string, expectedStatus: number[] }} monitor
@@ -27,7 +39,7 @@ export async function checkHttp(monitor) {
       await response.body?.cancel();
     }
 
-    const ms = Date.now() - start;
+    const ms = getTtfb() ?? (Date.now() - start);
     const ok = monitor.expectedStatus.includes(response.status);
 
     return {

@@ -10,6 +10,7 @@ A self-hosted uptime monitor that runs entirely on Cloudflare's free tier. It ch
 ## What it does
 
 - Checks HTTP and TCP endpoints on a 5-minute cron schedule
+- Reports response time as TTFB (time to first byte), excluding DNS/TLS overhead for a ping-like latency value
 - Stores 90 days of history in Cloudflare KV
 - Serves a status page at `/` with per-service uptime bars, a dynamic favicon, and a light/dark mode toggle
 - No external services, no database, no server to manage
