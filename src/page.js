@@ -329,6 +329,30 @@ export function getPage() {
       document.getElementById('last-updated').textContent =
         'Last updated ' + genAt.toLocaleTimeString();
       nextRefreshAt = Date.now() + REFRESH_MS;
+
+      // Favicon
+      const allDown = snapshot.monitors.every(m => m.latest && !m.latest.ok);
+      const faviconColor = allOk ? '#22c55e' : allDown ? '#ef4444' : '#f59e0b';
+      setFavicon(faviconColor);
+    }
+
+    // ── Favicon ───────────────────────────────────────────────────────────
+    function setFavicon(color) {
+      const canvas = document.createElement('canvas');
+      canvas.width = 32;
+      canvas.height = 32;
+      const ctx = canvas.getContext('2d');
+      ctx.beginPath();
+      ctx.arc(16, 16, 14, 0, Math.PI * 2);
+      ctx.fillStyle = color;
+      ctx.fill();
+      let link = document.querySelector("link[rel~='icon']");
+      if (!link) {
+        link = document.createElement('link');
+        link.rel = 'icon';
+        document.head.appendChild(link);
+      }
+      link.href = canvas.toDataURL();
     }
 
     // ── Tooltip positioning ───────────────────────────────────────────────
