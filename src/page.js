@@ -707,7 +707,7 @@ export function getPage() {
 
         <div class="detail-section">
           <h2 class="section-title">Response Time <span class="note">Last 24 hours</span></h2>
-          <div id="detail-chart"><p style="color:var(--muted)">Loading…</p></div>
+          <div id="detail-chart"></div>
         </div>
 
         <div class="detail-section">
@@ -718,17 +718,23 @@ export function getPage() {
 
       renderBars(document.getElementById('detail-bars'), slots);
 
+      // Build response time chart from snapshot's hourly bars — no extra KV reads
+      const cutoff24h  = Date.now() / 1000 - 86400;
+      const chartPts   = monitor.bars
+        .filter(b => b.total > 0 && new Date(b.hour).getTime() / 1000 >= cutoff24h)
+        .map(b => ({ ts: new Date(b.hour).getTime() / 1000, ms: b.avgMs }));
+      const chart = buildResponseChart(chartPts);
+      document.getElementById('detail-chart').innerHTML = chart.html;
+      attachChartTooltip(document.getElementById('detail-chart').querySelector('svg'), chart.pts);
+
+      // Fetch raw results only for recent events
       try {
         const res = await fetch(\`/api/monitor/\${encodeURIComponent(monitorId)}\`);
         if (!res.ok) throw new Error('HTTP ' + res.status);
         const results = await res.json();
-        const chart = buildResponseChart(results);
-        document.getElementById('detail-chart').innerHTML  = chart.html;
-        attachChartTooltip(document.getElementById('detail-chart').querySelector('svg'), chart.pts);
         document.getElementById('detail-events').innerHTML = buildRecentEvents(results);
       } catch (err) {
-        document.getElementById('detail-chart').innerHTML  = '<p style="color:var(--muted)">Failed to load data.</p>';
-        document.getElementById('detail-events').innerHTML = '<p style="color:var(--muted)">Failed to load data.</p>';
+        document.getElementById('detail-events').innerHTML = '<p style="color:var(--muted)">Failed to load events.</p>';
       }
     }
 

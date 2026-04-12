@@ -1,8 +1,8 @@
-.dev.vars
-node_modules/
-wrangler.toml
+.superpowers/
+.claude
 .wrangler/
 .idea/
-.superpowers/
 docs/superpowers/
-.claude
+node_modules/
+wrangler.toml
+.dev.vars
