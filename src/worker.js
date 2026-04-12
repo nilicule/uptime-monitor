@@ -95,6 +95,24 @@ async function runCheck(monitor) {
 const TTL_1H = 60 * 60;
 const TTL_90D = 90 * 24 * 60 * 60;
 
+/** Read maintenance:{id} and return the state object if active and not expired, else null. */
+async function getMaintenanceState(kv, id) {
+  const data = await kv.get(`maintenance:${id}`, "json");
+  if (!data || !data.active) return null;
+  const now = Math.floor(Date.now() / 1000);
+  if (data.expiresAt !== null && now > data.expiresAt) return null;
+  return data;
+}
+
+/** Append an event to events:{id}, pruning entries older than 90 days. */
+async function appendEvent(kv, id, event) {
+  const cutoff90d = Math.floor(Date.now() / 1000) - 90 * 24 * 3600;
+  const existing = (await kv.get(`events:${id}`, "json")) || [];
+  const pruned = existing.filter((e) => e.ts >= cutoff90d);
+  pruned.push(event);
+  await kv.put(`events:${id}`, JSON.stringify(pruned), { expirationTtl: TTL_90D });
+}
+
 async function writeResult(kv, result) {
   const value = JSON.stringify(result);
 
