@@ -27,6 +27,10 @@ export function getPage() {
       --down-glow: rgba(239,68,68,.2);
       --partial:   #f59e0b;
       --tooltip-bg: #0f172a;
+      --maintenance:      #3b82f6;
+      --maintenance-bar:  #2563eb;
+      --maintenance-glow: rgba(59,130,246,.2);
+      --maintenance-glow2:rgba(59,130,246,.05);
     }
 
     html.light {
@@ -46,6 +50,10 @@ export function getPage() {
       --down-glow: rgba(220,38,38,.2);
       --partial:   #d97706;
       --tooltip-bg: #1e293b;
+      --maintenance:      #2563eb;
+      --maintenance-bar:  #2563eb;
+      --maintenance-glow: rgba(37,99,235,.2);
+      --maintenance-glow2:rgba(37,99,235,.05);
     }
 
     body {
@@ -115,6 +123,11 @@ export function getPage() {
     .dot.green { background: var(--ok); box-shadow: 0 0 0 4px var(--ok-glow); animation: pulse 2s infinite; }
     .dot.red   { background: var(--down); box-shadow: 0 0 0 4px var(--down-glow); }
     .dot.grey  { background: var(--muted2); }
+    .dot.blue  { background: var(--maintenance); box-shadow: 0 0 0 4px var(--maintenance-glow); animation: pulse-maint 2s infinite; }
+    @keyframes pulse-maint {
+      0%, 100% { box-shadow: 0 0 0 4px var(--maintenance-glow); }
+      50%       { box-shadow: 0 0 0 8px var(--maintenance-glow2); }
+    }
     @keyframes pulse {
       0%, 100% { box-shadow: 0 0 0 4px var(--ok-glow); }
       50%       { box-shadow: 0 0 0 8px var(--ok-glow2); }
@@ -151,11 +164,23 @@ export function getPage() {
     .monitor-name a { color: inherit; text-decoration: none; }
     .monitor-name a:hover { text-decoration: underline; }
     .monitor-uptime { color: var(--muted); font-weight: 400; margin-left: 8px; }
+    .maintenance-badge {
+      display: inline-block;
+      background: var(--maintenance-bar);
+      color: #fff;
+      font-size: 10px;
+      font-weight: 600;
+      padding: 2px 6px;
+      border-radius: 4px;
+      margin-left: 8px;
+      vertical-align: middle;
+    }
     .monitor-status { font-size: 13px; display: flex; align-items: center; gap: 6px; }
     .monitor-status .indicator { width: 8px; height: 8px; border-radius: 50%; }
     .monitor-status.ok      .indicator { background: var(--ok); }
     .monitor-status.down    .indicator { background: var(--down); }
-    .monitor-status.unknown .indicator { background: var(--muted2); }
+    .monitor-status.unknown     .indicator { background: var(--muted2); }
+    .monitor-status.maintenance .indicator { background: var(--maintenance); }
 
     /* ── Timeline bars ── */
     .bars-wrap { width: 100%; overflow: hidden; }
@@ -164,7 +189,8 @@ export function getPage() {
     .bar.ok      { background: var(--ok-bar); }
     .bar.partial { background: var(--partial); }
     .bar.down    { background: var(--down-bar); }
-    .bar.nodata  { background: var(--muted3); }
+    .bar.nodata       { background: var(--muted3); }
+    .bar.maintenance  { background: var(--maintenance-bar); }
     .bars-labels {
       display: flex; justify-content: space-between;
       margin-top: 4px; color: var(--muted2); font-size: 10px;
@@ -212,7 +238,8 @@ export function getPage() {
     .detail-banner .dot { width: 22px; height: 22px; }
     .detail-banner-text h2 { font-size: 22px; font-weight: 700; }
     .detail-banner-text h2 .ok-label   { color: var(--ok); }
-    .detail-banner-text h2 .down-label { color: var(--down); }
+    .detail-banner-text h2 .down-label        { color: var(--down); }
+    .detail-banner-text h2 .maintenance-label { color: var(--maintenance); }
     .detail-banner-text p { color: var(--muted); font-size: 13px; margin-top: 4px; }
 
     .detail-section { margin-bottom: 32px; }
@@ -268,7 +295,8 @@ export function getPage() {
       font-size: 11px; font-weight: 700;
     }
     .event-icon.up   { background: var(--ok);   color: #fff; }
-    .event-icon.down { background: var(--down);  color: #fff; }
+    .event-icon.down        { background: var(--down);        color: #fff; }
+    .event-icon.maintenance { background: var(--maintenance); color: #fff; }
     .event-title { font-size: 14px; font-weight: 600; }
     .event-time { color: var(--muted); font-size: 12px; margin-top: 5px; padding-left: 30px; }
     .event-error {
