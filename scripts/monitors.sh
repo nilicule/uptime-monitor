@@ -59,10 +59,32 @@ parse_duration() {
 
 cmd_list() {
   check_deps
+  local config
+  config=$(get_config)
+  local count
+  count=$(echo "$config" | jq 'length')
+
   echo ""
-  echo "Current monitors (from config:monitors KV key):"
+  if [[ "$count" -eq 0 ]]; then
+    echo "No monitors configured."
+    return
+  fi
+
+  printf "%-16s  %-6s  %-30s  %s\n" "ID" "TYPE" "NAME" "TARGET"
+  printf "%-16s  %-6s  %-30s  %s\n" "────────────────" "──────" "──────────────────────────────" "──────────────────────────────"
+  while IFS= read -r entry; do
+    local id type name target
+    id=$(echo "$entry"    | jq -r '.id')
+    type=$(echo "$entry"  | jq -r '.type')
+    name=$(echo "$entry"  | jq -r '.name')
+    if [[ "$type" == "http" ]]; then
+      target=$(echo "$entry" | jq -r '.url')
+    else
+      target=$(echo "$entry" | jq -r '"\(.host):\(.port)"')
+    fi
+    printf "%-16s  %-6s  %-30s  %s\n" "$id" "$type" "$name" "$target"
+  done < <(echo "$config" | jq -c '.[]')
   echo ""
-  get_config | jq .
 }
 
 cmd_add() {
