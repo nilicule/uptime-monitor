@@ -206,7 +206,7 @@ export function getPage() {
       font-size: 12px;
       border-top: 1px solid var(--border);
     }
-    footer a { color: var(--muted); text-decoration: none; }
+    footer a { color: var(--muted2); text-decoration: none; }
     footer a:hover { color: var(--muted2); }
     footer:hover .heart { color: var(--down); }
   </style>
@@ -244,7 +244,7 @@ export function getPage() {
   </div>
 
   <footer>
-    built with <span class="heart">♥</span> · <a href="https://github.com/nilicule/uptime-monitor" target="_blank" rel="noopener">source on GitHub</a> · <a href="https://creativecommons.org/licenses/by-nc/4.0/" target="_blank" rel="noopener">CC BY-NC 4.0</a>
+    built with <span class="heart">♥</span> · <a href="https://github.com/nilicule/uptime-monitor" target="_blank" rel="noopener">source on GitHub</a>
   </footer>
 
   <script>
