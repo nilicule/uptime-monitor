@@ -11,11 +11,21 @@ export async function checkHttp(monitor) {
   const timer = setTimeout(() => controller.abort(), 10_000);
 
   try {
-    const response = await fetch(monitor.url, {
+    let response = await fetch(monitor.url, {
       method: "HEAD",
       redirect: "follow",
       signal: controller.signal,
     });
+
+    // Some servers don't support HEAD — fall back to GET and discard the body
+    if (response.status === 405) {
+      response = await fetch(monitor.url, {
+        method: "GET",
+        redirect: "follow",
+        signal: controller.signal,
+      });
+      await response.body?.cancel();
+    }
 
     const ms = Date.now() - start;
     const ok = monitor.expectedStatus.includes(response.status);
