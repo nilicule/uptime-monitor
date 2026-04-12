@@ -9,9 +9,48 @@ export function getPage() {
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+    /* ── Color tokens (dark default) ── */
+    :root {
+      --bg:        #0f172a;
+      --surface:   #1e293b;
+      --border:    #1e293b;
+      --text:      #f1f5f9;
+      --muted:     #64748b;
+      --muted2:    #475569;
+      --muted3:    #334155;
+      --ok:        #22c55e;
+      --ok-bar:    #16a34a;
+      --ok-glow:   rgba(34,197,94,.2);
+      --ok-glow2:  rgba(34,197,94,.05);
+      --down:      #ef4444;
+      --down-bar:  #dc2626;
+      --down-glow: rgba(239,68,68,.2);
+      --partial:   #f59e0b;
+      --tooltip-bg: #0f172a;
+    }
+
+    html.light {
+      --bg:        #f8fafc;
+      --surface:   #ffffff;
+      --border:    #e2e8f0;
+      --text:      #0f172a;
+      --muted:     #64748b;
+      --muted2:    #94a3b8;
+      --muted3:    #cbd5e1;
+      --ok:        #16a34a;
+      --ok-bar:    #16a34a;
+      --ok-glow:   rgba(22,163,74,.2);
+      --ok-glow2:  rgba(22,163,74,.05);
+      --down:      #dc2626;
+      --down-bar:  #dc2626;
+      --down-glow: rgba(220,38,38,.2);
+      --partial:   #d97706;
+      --tooltip-bg: #1e293b;
+    }
+
     body {
-      background: #0f172a;
-      color: #f1f5f9;
+      background: var(--bg);
+      color: var(--text);
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
       min-height: 100vh;
       display: flex;
@@ -20,8 +59,8 @@ export function getPage() {
 
     /* ── Header ── */
     header {
-      background: #0f172a;
-      border-bottom: 1px solid #1e293b;
+      background: var(--bg);
+      border-bottom: 1px solid var(--border);
       padding: 16px 24px;
     }
     .header-inner {
@@ -33,14 +72,30 @@ export function getPage() {
       align-items: center;
     }
     header h1 { font-size: 20px; font-weight: 700; }
-    #meta { color: #64748b; font-size: 13px; text-align: right; line-height: 1.6; }
+    #meta { color: var(--muted); font-size: 13px; text-align: right; line-height: 1.6; }
+
+    /* ── Theme toggle ── */
+    #theme-toggle {
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 16px;
+      line-height: 1;
+      padding: 6px 8px;
+      margin-left: 16px;
+      flex-shrink: 0;
+      transition: color .15s, border-color .15s;
+    }
+    #theme-toggle:hover { color: var(--text); border-color: var(--muted2); }
 
     /* ── Main content ── */
     main { flex: 1; max-width: 860px; width: 100%; margin: 32px auto; padding: 0 24px; }
 
     /* ── Banner ── */
     #banner {
-      background: #1e293b;
+      background: var(--surface);
       border-radius: 10px;
       padding: 20px 24px;
       display: flex;
@@ -52,23 +107,24 @@ export function getPage() {
       width: 16px; height: 16px; border-radius: 50%;
       flex-shrink: 0;
     }
-    .dot.green { background: #22c55e; box-shadow: 0 0 0 4px rgba(34,197,94,.2); animation: pulse 2s infinite; }
-    .dot.red   { background: #ef4444; box-shadow: 0 0 0 4px rgba(239,68,68,.2); }
-    .dot.grey  { background: #475569; }
+    .dot.green { background: var(--ok); box-shadow: 0 0 0 4px var(--ok-glow); animation: pulse 2s infinite; }
+    .dot.red   { background: var(--down); box-shadow: 0 0 0 4px var(--down-glow); }
+    .dot.grey  { background: var(--muted2); }
     @keyframes pulse {
-      0%, 100% { box-shadow: 0 0 0 4px rgba(34,197,94,.2); }
-      50%       { box-shadow: 0 0 0 8px rgba(34,197,94,.05); }
+      0%, 100% { box-shadow: 0 0 0 4px var(--ok-glow); }
+      50%       { box-shadow: 0 0 0 8px var(--ok-glow2); }
     }
     #banner-text { font-size: 18px; font-weight: 600; }
-    #banner-text span { color: #22c55e; }
-    #banner-text span.down { color: #ef4444; }
+    #banner-text span { color: var(--ok); }
+    #banner-text span.down { color: var(--down); }
 
     /* ── Services section ── */
-    h2.section-title { font-size: 16px; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 16px; }
+    h2.section-title { font-size: 16px; font-weight: 600; color: var(--muted2); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 16px; }
 
     /* ── Monitor card ── */
     .monitor {
-      background: #1e293b;
+      background: var(--surface);
+      border: 1px solid var(--border);
       border-radius: 10px;
       padding: 18px 20px;
       margin-bottom: 12px;
@@ -80,12 +136,12 @@ export function getPage() {
       margin-bottom: 12px;
     }
     .monitor-name { font-size: 14px; font-weight: 600; }
-    .monitor-uptime { color: #64748b; font-weight: 400; margin-left: 8px; }
+    .monitor-uptime { color: var(--muted); font-weight: 400; margin-left: 8px; }
     .monitor-status { font-size: 13px; display: flex; align-items: center; gap: 6px; }
     .monitor-status .indicator { width: 8px; height: 8px; border-radius: 50%; }
-    .monitor-status.ok   .indicator { background: #22c55e; }
-    .monitor-status.down .indicator { background: #ef4444; }
-    .monitor-status.unknown .indicator { background: #475569; }
+    .monitor-status.ok   .indicator { background: var(--ok); }
+    .monitor-status.down .indicator { background: var(--down); }
+    .monitor-status.unknown .indicator { background: var(--muted2); }
 
     /* ── Timeline bars ── */
     .bars-wrap { width: 100%; overflow: hidden; }
@@ -100,23 +156,23 @@ export function getPage() {
       border-radius: 1px;
       min-width: 0;
     }
-    .bar.ok      { background: #16a34a; }
-    .bar.partial { background: #f59e0b; }
-    .bar.down    { background: #dc2626; }
-    .bar.nodata  { background: #334155; }
+    .bar.ok      { background: var(--ok-bar); }
+    .bar.partial { background: var(--partial); }
+    .bar.down    { background: var(--down-bar); }
+    .bar.nodata  { background: var(--muted3); }
     .bars-labels {
       display: flex;
       justify-content: space-between;
       margin-top: 4px;
-      color: #475569;
+      color: var(--muted2);
       font-size: 10px;
     }
 
     /* ── Bar tooltip ── */
     #bar-tooltip {
       position: fixed;
-      background: #0f172a;
-      border: 1px solid #334155;
+      background: var(--tooltip-bg);
+      border: 1px solid var(--muted3);
       border-radius: 8px;
       padding: 8px 12px;
       pointer-events: none;
@@ -127,8 +183,8 @@ export function getPage() {
       white-space: nowrap;
     }
     #bar-tooltip.visible { opacity: 1; }
-    #bar-tooltip .tip-date { color: #64748b; font-size: 11px; margin-bottom: 2px; }
-    #bar-tooltip .tip-value { color: #f1f5f9; font-size: 15px; font-weight: 600; }
+    #bar-tooltip .tip-date { color: var(--muted); font-size: 11px; margin-bottom: 2px; }
+    #bar-tooltip .tip-value { color: var(--text); font-size: 15px; font-weight: 600; }
     #bar-tooltip::after {
       content: '';
       position: absolute;
@@ -136,32 +192,35 @@ export function getPage() {
       left: 50%;
       transform: translateX(-50%);
       border: 6px solid transparent;
-      border-top-color: #0f172a;
+      border-top-color: var(--tooltip-bg);
     }
 
     /* ── Error / loading ── */
-    #loading { color: #64748b; text-align: center; padding: 48px 0; font-size: 15px; }
+    #loading { color: var(--muted); text-align: center; padding: 48px 0; font-size: 15px; }
 
     /* ── Footer ── */
     footer {
       text-align: center;
       padding: 24px;
-      color: #475569;
+      color: var(--muted2);
       font-size: 12px;
-      border-top: 1px solid #1e293b;
+      border-top: 1px solid var(--border);
     }
-    footer a { color: #64748b; text-decoration: none; }
-    footer a:hover { color: #94a3b8; }
-    footer:hover .heart { color: #ef4444; }
+    footer a { color: var(--muted); text-decoration: none; }
+    footer a:hover { color: var(--muted2); }
+    footer:hover .heart { color: var(--down); }
   </style>
 </head>
 <body>
   <header>
     <div class="header-inner">
       <h1>Status page</h1>
-      <div id="meta">
-        <div id="last-updated">Loading…</div>
-        <div id="next-update"></div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <div id="meta">
+          <div id="last-updated">Loading…</div>
+          <div id="next-update"></div>
+        </div>
+        <button id="theme-toggle" aria-label="Toggle theme" title="Toggle light/dark mode">🌙</button>
       </div>
     </div>
   </header>
@@ -192,6 +251,39 @@ export function getPage() {
     const REFRESH_MS = 5 * 60 * 1000;
 
     let nextRefreshAt = null;
+
+    // ── Theme toggle ──────────────────────────────────────────────────────
+    const THEME_KEY = 'uptime-theme';
+    const toggleBtn = document.getElementById('theme-toggle');
+
+    function applyTheme(theme) {
+      if (theme === 'light') {
+        document.documentElement.classList.add('light');
+        toggleBtn.textContent = '☀️';
+        toggleBtn.title = 'Switch to dark mode';
+      } else {
+        document.documentElement.classList.remove('light');
+        toggleBtn.textContent = '🌙';
+        toggleBtn.title = 'Switch to light mode';
+      }
+    }
+
+    // Initialise from stored preference, fall back to OS preference
+    (function initTheme() {
+      const stored = localStorage.getItem(THEME_KEY);
+      if (stored) {
+        applyTheme(stored);
+      } else if (window.matchMedia('(prefers-color-scheme: light)').matches) {
+        applyTheme('light');
+      }
+    })();
+
+    toggleBtn.addEventListener('click', () => {
+      const isLight = document.documentElement.classList.contains('light');
+      const next = isLight ? 'dark' : 'light';
+      applyTheme(next);
+      localStorage.setItem(THEME_KEY, next);
+    });
 
     // ── HTML escaping helper ──────────────────────────────────────────────
     function escHtml(s) {

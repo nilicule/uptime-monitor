@@ -8,7 +8,7 @@ A self-hosted uptime monitor that runs entirely on Cloudflare's free tier. It ch
 
 - Checks HTTP and TCP endpoints on a 5-minute cron schedule
 - Stores 90 days of history in Cloudflare KV
-- Serves a dark-mode status page at `/` with per-service uptime bars and a dynamic favicon
+- Serves a status page at `/` with per-service uptime bars, a dynamic favicon, and a light/dark mode toggle
 - No external services, no database, no server to manage
 
 ## Requirements
