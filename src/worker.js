@@ -148,6 +148,37 @@ async function writeResult(kv, result, prevResult, maintenance) {
   await kv.put(hk, JSON.stringify(bucket), { expirationTtl: TTL_90D });
 }
 
+/**
+ * Compare previous and current check state, write events on transitions.
+ * maintenance_start is written by the CLI; the worker only writes maintenance_end.
+ */
+async function detectAndWriteEvents(kv, result, prevResult, maintenance) {
+  const events = [];
+  const now = result.ts;
+
+  // maintenance_end: maintenance was on last check, now it's off
+  if (prevResult?.maintenance && !result.maintenance) {
+    events.push({ type: "maintenance_end", ts: now });
+  }
+
+  // up/down transitions (always tracked regardless of maintenance state)
+  if (prevResult !== null && prevResult !== undefined) {
+    if (prevResult.ok && !result.ok) {
+      events.push({
+        type: "down",
+        ts: now,
+        error: result.error || (result.statusCode ? `HTTP ${result.statusCode}` : null),
+      });
+    } else if (!prevResult.ok && result.ok) {
+      events.push({ type: "up", ts: now });
+    }
+  }
+
+  for (const event of events) {
+    await appendEvent(kv, result.id, event);
+  }
+}
+
 // ─── Dashboard snapshot builder ───────────────────────────────────────────────
 
 async function buildSnapshot(kv, monitors) {
