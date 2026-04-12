@@ -206,32 +206,31 @@ async function buildSnapshot(kv, monitors) {
   const now = Math.floor(Date.now() / 1000);
   const cutoff90d = now - 90 * 24 * 3600;
   const cutoff30d = now - 30 * 24 * 3600;
-  const cutoff7d = now - 7 * 24 * 3600;
+  const cutoff7d  = now - 7  * 24 * 3600;
+  const cutoff24h = now - 24 * 3600;
 
-  /** Parse "YYYY-MM-DD-HH" back to a Unix timestamp (start of that UTC hour). */
   function hourKeyToTs(hk) {
-    // hk format: YYYY-MM-DD-HH
     const [yyyy, mm, dd, hh] = hk.split("-");
     return Date.UTC(Number(yyyy), Number(mm) - 1, Number(dd), Number(hh)) / 1000;
   }
 
   const monitorSnapshots = await Promise.all(
     monitors.map(async (monitor) => {
-      const [latestRaw, summaryKeys] = await Promise.all([
+      const [latestRaw, summaryKeys, maintenanceState] = await Promise.all([
         kv.get(`latest:${monitor.id}`, "json"),
         listAllKeys(kv, `summary:${monitor.id}:`),
+        getMaintenanceState(kv, monitor.id),
       ]);
 
-      // Build bars and compute aggregates
       const bars = [];
       let checks90 = 0, ok90 = 0;
       let checks30 = 0, ok30 = 0;
-      let checks7 = 0, ok7 = 0, totalMs7 = 0;
+      let checks7  = 0, ok7  = 0, totalMs7  = 0;
+      let checks24 = 0, ok24 = 0;
 
-      // Fetch all summary buckets in parallel
       const buckets = await Promise.all(
         summaryKeys.map(async (key) => {
-          const hourSuffix = key.name.slice(`summary:${monitor.id}:`.length); // "YYYY-MM-DD-HH"
+          const hourSuffix = key.name.slice(`summary:${monitor.id}:`.length);
           const ts = hourKeyToTs(hourSuffix);
           const data = await kv.get(key.name, "json");
           return { ts, data };
@@ -241,25 +240,21 @@ async function buildSnapshot(kv, monitors) {
       for (const { ts, data } of buckets) {
         if (!data || ts < cutoff90d) continue;
 
+        const m   = data.maintenance   || 0;
+        const mOk = data.maintenanceOk || 0;
+
         bars.push({
-          hour: new Date(ts * 1000).toISOString(),
-          ok: data.ok,
-          total: data.checks,
-          avgMs: data.avgMs,
+          hour:        new Date(ts * 1000).toISOString(),
+          ok:          data.ok,
+          total:       data.checks,
+          maintenance: m,
+          avgMs:       data.avgMs,
         });
 
-        checks90 += data.checks;
-        ok90 += data.ok;
-
-        if (ts >= cutoff30d) {
-          checks30 += data.checks;
-          ok30 += data.ok;
-        }
-        if (ts >= cutoff7d) {
-          checks7 += data.checks;
-          ok7 += data.ok;
-          totalMs7 += data.avgMs * data.checks;
-        }
+        checks90 += data.checks - m; ok90 += data.ok - mOk;
+        if (ts >= cutoff30d) { checks30 += data.checks - m; ok30 += data.ok - mOk; }
+        if (ts >= cutoff7d)  { checks7  += data.checks - m; ok7  += data.ok - mOk; totalMs7 += data.avgMs * (data.checks - m); }
+        if (ts >= cutoff24h) { checks24 += data.checks - m; ok24 += data.ok - mOk; }
       }
 
       bars.sort((a, b) => a.hour.localeCompare(b.hour));
@@ -268,22 +263,23 @@ async function buildSnapshot(kv, monitors) {
         total === 0 ? null : Math.round((ok / total) * 10000) / 100;
 
       return {
-        id: monitor.id,
-        name: monitor.name,
-        latest: latestRaw || null,
-        uptime7d: pct(ok7, checks7),
-        uptime30d: pct(ok30, checks30),
-        uptime90d: pct(ok90, checks90),
-        avgMs7d: checks7 === 0 ? null : Math.round(totalMs7 / checks7),
+        id:         monitor.id,
+        name:       monitor.name,
+        latest:     latestRaw || null,
+        maintenance: maintenanceState
+          ? { active: true, message: maintenanceState.message || null, startedAt: maintenanceState.startedAt, expiresAt: maintenanceState.expiresAt }
+          : null,
+        uptime24h:  pct(ok24, checks24),
+        uptime7d:   pct(ok7,  checks7),
+        uptime30d:  pct(ok30, checks30),
+        uptime90d:  pct(ok90, checks90),
+        avgMs7d:    checks7 === 0 ? null : Math.round(totalMs7 / checks7),
         bars,
       };
     })
   );
 
-  return {
-    generatedAt: now,
-    monitors: monitorSnapshots,
-  };
+  return { generatedAt: now, monitors: monitorSnapshots };
 }
 
 // ─── Scheduled handler ────────────────────────────────────────────────────────
