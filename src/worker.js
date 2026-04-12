@@ -351,23 +351,8 @@ async function handleFetch(request, env, ctx) {
   if (monitorMatch) {
     return cachedFetch(request, ctx, async () => {
       const id = monitorMatch[1];
-      const now = Math.floor(Date.now() / 1000);
-      const cutoff = now - 24 * 3600;
-
-      const keys = await listAllKeys(env.UPTIME_KV, `result:${id}:`);
-
-      // Filter to last 24h by timestamp embedded in key name: result:{id}:{ts}
-      const recentKeys = keys.filter((k) => {
-        const parts = k.name.split(":");
-        const ts = Number(parts[parts.length - 1]);
-        return ts >= cutoff;
-      });
-
-      const results = await Promise.all(
-        recentKeys.map((k) => env.UPTIME_KV.get(k.name, "json"))
-      );
-
-      return new Response(JSON.stringify(results.filter(Boolean)), {
+      const events = (await env.UPTIME_KV.get(`events:${id}`, "json")) || [];
+      return new Response(JSON.stringify(events), {
         headers: {
           "Content-Type": "application/json",
           "Cache-Control": "public, max-age=300, s-maxage=300",
