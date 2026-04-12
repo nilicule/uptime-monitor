@@ -107,6 +107,33 @@ export function getPage() {
       font-size: 10px;
     }
 
+    /* ── Bar tooltip ── */
+    #bar-tooltip {
+      position: fixed;
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      padding: 8px 12px;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity .1s;
+      z-index: 100;
+      text-align: center;
+      white-space: nowrap;
+    }
+    #bar-tooltip.visible { opacity: 1; }
+    #bar-tooltip .tip-date { color: #64748b; font-size: 11px; margin-bottom: 2px; }
+    #bar-tooltip .tip-value { color: #f1f5f9; font-size: 15px; font-weight: 600; }
+    #bar-tooltip::after {
+      content: '';
+      position: absolute;
+      top: 100%;
+      left: 50%;
+      transform: translateX(-50%);
+      border: 6px solid transparent;
+      border-top-color: #0f172a;
+    }
+
     /* ── Error / loading ── */
     #loading { color: #64748b; text-align: center; padding: 48px 0; font-size: 15px; }
 
@@ -144,6 +171,11 @@ export function getPage() {
       <div id="monitor-list"></div>
     </div>
   </main>
+
+  <div id="bar-tooltip">
+    <div class="tip-date" id="tip-date"></div>
+    <div class="tip-value" id="tip-value"></div>
+  </div>
 
   <footer>
     built with <span class="heart">♥</span> · <a href="https://github.com/nilicule/uptime-monitor" target="_blank" rel="noopener">source on GitHub</a>
@@ -253,11 +285,33 @@ export function getPage() {
         list.appendChild(card);
 
         const barsEl = card.querySelector('.bars');
-        for (const slot of slots) {
+        const today = new Date();
+        today.setUTCHours(0, 0, 0, 0);
+
+        slots.forEach((slot, i) => {
           const bar = document.createElement('div');
           bar.className = 'bar ' + barClass(slot);
+
+          const dayOffset = 89 - i; // 0 = today, 89 = 89 days ago
+          const dayDate = new Date(today.getTime() - dayOffset * 24 * 3600 * 1000);
+          const dateStr = dayDate.toISOString().slice(0, 10);
+          const valueStr = !slot || slot.total === 0
+            ? 'No data'
+            : (slot.ok / slot.total * 100).toFixed(2) + '%';
+
+          bar.addEventListener('mouseenter', (e) => {
+            document.getElementById('tip-date').textContent = dateStr;
+            document.getElementById('tip-value').textContent = valueStr;
+            positionTooltip(e);
+            document.getElementById('bar-tooltip').classList.add('visible');
+          });
+          bar.addEventListener('mousemove', positionTooltip);
+          bar.addEventListener('mouseleave', () => {
+            document.getElementById('bar-tooltip').classList.remove('visible');
+          });
+
           barsEl.appendChild(bar);
-        }
+        });
       }
 
       document.getElementById('loading').style.display = 'none';
@@ -268,6 +322,16 @@ export function getPage() {
       document.getElementById('last-updated').textContent =
         'Last updated ' + genAt.toLocaleTimeString();
       nextRefreshAt = Date.now() + REFRESH_MS;
+    }
+
+    // ── Tooltip positioning ───────────────────────────────────────────────
+    function positionTooltip(e) {
+      const tt = document.getElementById('bar-tooltip');
+      const rect = tt.getBoundingClientRect();
+      const x = Math.min(e.clientX - rect.width / 2, window.innerWidth - rect.width - 8);
+      const y = e.clientY - rect.height - 14;
+      tt.style.left = Math.max(8, x) + 'px';
+      tt.style.top = y + 'px';
     }
 
     // ── Countdown tick ────────────────────────────────────────────────────
