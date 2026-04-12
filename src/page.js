@@ -473,18 +473,6 @@ export function getPage() {
     }
 
     // ── Compute 24 h uptime from hourly bars ──────────────────────────────
-    function uptime24h(barsArray) {
-      const cutoff = Date.now() / 1000 - 86400;
-      let ok = 0, total = 0;
-      for (const b of barsArray) {
-        if (new Date(b.hour).getTime() / 1000 >= cutoff) {
-          ok    += b.ok;
-          total += b.total;
-        }
-      }
-      return total === 0 ? null : Math.round(ok / total * 10000) / 100;
-    }
-
     // ── Response-time SVG chart ───────────────────────────────────────────
     function buildResponseChart(results) {
       const pts = results.filter(r => r.ms != null).sort((a, b) => a.ts - b.ts);
@@ -702,12 +690,15 @@ export function getPage() {
       const monitor = lastSnapshot.monitors.find(m => m.id === monitorId);
       if (!monitor) { window.location.hash = ''; return; }
 
+      const isMaint     = !!monitor.maintenance?.active;
       const isOk        = monitor.latest?.ok;
-      const dotClass    = monitor.latest == null ? 'grey' : isOk ? 'green' : 'red';
-      const statusLabel = monitor.latest == null ? 'unknown' : isOk ? 'operational' : 'down';
-      const labelClass  = isOk ? 'ok-label' : 'down-label';
+      const dotClass    = monitor.latest == null ? 'grey' : isMaint ? 'blue' : isOk ? 'green' : 'red';
+      const statusLabel = monitor.latest == null ? 'unknown' : isMaint ? 'in maintenance' : isOk ? 'operational' : 'down';
+      const labelClass  = isMaint ? 'maintenance-label' : isOk ? 'ok-label' : 'down-label';
+      const maintMsg    = isMaint && monitor.maintenance.message
+        ? \`<p style="color:var(--maintenance);font-size:13px;margin-top:4px">\${escHtml(monitor.maintenance.message)}</p>\`
+        : '';
       const slots       = buildDailySlots(monitor.bars);
-      const u24         = uptime24h(monitor.bars);
       const fmtPct      = v => v != null ? v.toFixed(3) + '%' : '—';
 
       const detailEl = document.getElementById('detail');
@@ -716,6 +707,7 @@ export function getPage() {
           <div class="dot \${escHtml(dotClass)}"></div>
           <div class="detail-banner-text">
             <h2>\${escHtml(monitor.name)} is <span class="\${labelClass}">\${statusLabel}</span></h2>
+            \${maintMsg}
             <p>Checked every 5 minutes</p>
           </div>
         </div>
@@ -732,7 +724,7 @@ export function getPage() {
         <div class="detail-section">
           <h2 class="section-title">Overall Uptime</h2>
           <div class="stat-grid">
-            <div class="stat-card"><div class="stat-value">\${escHtml(fmtPct(u24))}</div><div class="stat-label">Last 24 hours</div></div>
+            <div class="stat-card"><div class="stat-value">\${escHtml(fmtPct(monitor.uptime24h))}</div><div class="stat-label">Last 24 hours</div></div>
             <div class="stat-card"><div class="stat-value">\${escHtml(fmtPct(monitor.uptime7d))}</div><div class="stat-label">Last 7 days</div></div>
             <div class="stat-card"><div class="stat-value">\${escHtml(fmtPct(monitor.uptime30d))}</div><div class="stat-label">Last 30 days</div></div>
             <div class="stat-card"><div class="stat-value">\${escHtml(fmtPct(monitor.uptime90d))}</div><div class="stat-label">Last 90 days</div></div>
@@ -745,7 +737,7 @@ export function getPage() {
         </div>
 
         <div class="detail-section">
-          <h2 class="section-title">Recent events <span class="note">Last 24 hours</span></h2>
+          <h2 class="section-title">Recent events <span class="note">Last 90 days</span></h2>
           <div id="detail-events"><p style="color:var(--muted)">Loading…</p></div>
         </div>
       \`;
