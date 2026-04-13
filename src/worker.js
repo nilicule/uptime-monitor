@@ -190,6 +190,7 @@ async function runMonitor(kv, monitor) {
   ]);
 
   const result = await runCheck(monitor);
+  result.excluded = result.statusCode === 521;
   await writeResult(kv, result, maintenance);
   await detectAndWriteEvents(kv, result, prevResult);
   return result;
