@@ -63,15 +63,35 @@ Event types: `down`, `up`, `maintenance_start`, `maintenance_end`. Entries older
 
 `maintenance_start` is written immediately by the CLI (`maintenance on`). `maintenance_end` is written by the worker on the next check cycle after maintenance is disabled (≤5 min delay).
 
-### Updated summary bucket structure
+### Summary bucket structure
 
-Hourly summary buckets (`summary:{id}:{YYYY-MM-DD-HH}`) now include `maintenance` and `maintenanceOk` counts:
+Hourly summary buckets (`summary:{id}:{YYYY-MM-DD-HH}`) aggregate per-hour check results:
 
 ```json
-{ "checks": 12, "ok": 10, "maintenance": 2, "maintenanceOk": 2, "avgMs": 145, "minMs": 120, "maxMs": 210 }
+{
+  "checks": 12,
+  "ok": 10,
+  "maintenance": 2,
+  "maintenanceOk": 2,
+  "excluded": 1,
+  "excludedOk": 0,
+  "avgMs": 145,
+  "minMs": 120,
+  "maxMs": 210
+}
 ```
 
-Uptime % is calculated as `(ok - maintenanceOk) / (checks - maintenance)`.
+| Field | Description |
+|-------|-------------|
+| `checks` | Total checks in this hour |
+| `ok` | Checks that returned a successful result |
+| `maintenance` | Checks that ran while the monitor was in maintenance mode |
+| `maintenanceOk` | Maintenance checks that were also `ok` |
+| `excluded` | Checks excluded from uptime (e.g. HTTP 521 Cloudflare errors) |
+| `excludedOk` | Excluded checks that were also `ok` |
+| `avgMs` / `minMs` / `maxMs` | Response time stats across all checks in the hour |
+
+Uptime % is calculated as `(ok - maintenanceOk - excludedOk) / (checks - maintenance - excluded)`.
 
 ## HTTP API
 
