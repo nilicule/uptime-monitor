@@ -253,6 +253,7 @@ async function buildSnapshot(kv, monitors) {
           ok:          data.ok,
           total:       data.checks,
           maintenance: m,
+          excluded:    excl,
           avgMs:       data.avgMs,
         });
 

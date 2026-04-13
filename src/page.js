@@ -33,6 +33,7 @@ export function getPage() {
       --maintenance-bar:  #2563eb;
       --maintenance-glow: rgba(59,130,246,.2);
       --maintenance-glow2:rgba(59,130,246,.05);
+      --excluded-bar:     #475569;
     }
 
     html.light {
@@ -58,6 +59,7 @@ export function getPage() {
       --maintenance-bar:  #2563eb;
       --maintenance-glow: rgba(37,99,235,.2);
       --maintenance-glow2:rgba(37,99,235,.05);
+      --excluded-bar:     #94a3b8;
     }
 
     body {
@@ -195,6 +197,7 @@ export function getPage() {
     .bar.down    { background: var(--down-bar); }
     .bar.nodata       { background: var(--muted3); }
     .bar.maintenance  { background: var(--maintenance-bar); }
+    .bar.excluded     { background: var(--excluded-bar); }
     .bars-labels {
       display: flex; justify-content: space-between;
       margin-top: 4px; color: var(--muted2); font-size: 10px;
@@ -420,10 +423,11 @@ export function getPage() {
       const byDay = {};
       for (const b of barsArray) {
         const day = b.hour.slice(0, 10);
-        if (!byDay[day]) byDay[day] = { ok: 0, total: 0, maintenance: 0 };
+        if (!byDay[day]) byDay[day] = { ok: 0, total: 0, maintenance: 0, excluded: 0 };
         byDay[day].ok          += b.ok;
         byDay[day].total       += b.total;
         byDay[day].maintenance += (b.maintenance || 0);
+        byDay[day].excluded    += (b.excluded    || 0);
       }
       const now = Date.now();
       const todayStart = new Date(now);
@@ -440,6 +444,7 @@ export function getPage() {
     function barClass(slot) {
       if (!slot || slot.total === 0)  return 'nodata';
       if (slot.maintenance > 0)       return 'maintenance';
+      if (slot.ok + (slot.excluded || 0) >= slot.total && slot.excluded > 0) return 'excluded';
       if (slot.ok === slot.total)     return 'ok';
       if (slot.ok === 0)              return 'down';
       return 'partial';
@@ -460,7 +465,9 @@ export function getPage() {
           ? 'No data'
           : slot.maintenance > 0
             ? 'Maintenance'
-            : (slot.ok / slot.total * 100).toFixed(2) + '%';
+            : slot.ok + (slot.excluded || 0) >= slot.total && slot.excluded > 0
+              ? 'Excluded (521)'
+              : (slot.ok / slot.total * 100).toFixed(2) + '%';
 
         bar.addEventListener('mouseenter', (e) => {
           document.getElementById('tip-date').textContent  = dateStr;
