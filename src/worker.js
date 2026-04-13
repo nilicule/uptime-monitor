@@ -243,8 +243,10 @@ async function buildSnapshot(kv, monitors) {
 
         const m              = data.maintenance   || 0;
         const mOk            = data.maintenanceOk || 0;
-        const effectiveTotal = Math.max(0, data.checks - m);
-        const effectiveOk    = Math.max(0, data.ok - mOk);
+        const excl           = data.excluded      || 0;
+        const exclOk         = data.excludedOk    || 0;
+        const effectiveTotal = Math.max(0, data.checks - m - excl);
+        const effectiveOk    = Math.max(0, data.ok - mOk - exclOk);
 
         bars.push({
           hour:        new Date(ts * 1000).toISOString(),
