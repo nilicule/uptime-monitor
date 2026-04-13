@@ -130,6 +130,7 @@ async function writeResult(kv, result, maintenance) {
   const existing = await kv.get(hk, "json");
   const bucket = existing || {
     checks: 0, ok: 0, maintenance: 0, maintenanceOk: 0,
+    excluded: 0, excludedOk: 0,
     avgMs: 0, minMs: Infinity, maxMs: 0,
   };
 
@@ -139,6 +140,10 @@ async function writeResult(kv, result, maintenance) {
   if (result.maintenance) {
     bucket.maintenance = (bucket.maintenance || 0) + 1;
     if (result.ok) bucket.maintenanceOk = (bucket.maintenanceOk || 0) + 1;
+  }
+  if (result.excluded) {
+    bucket.excluded = (bucket.excluded || 0) + 1;
+    if (result.ok) bucket.excludedOk = (bucket.excludedOk || 0) + 1;
   }
   bucket.avgMs = Math.round((prevTotal + result.ms) / bucket.checks);
   bucket.minMs = Math.min(bucket.minMs === Infinity ? result.ms : bucket.minMs, result.ms);
