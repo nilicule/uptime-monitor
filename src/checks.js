@@ -13,7 +13,7 @@ function getTtfb() {
 }
 
 /**
- * Perform an HTTP HEAD check against a monitor.
+ * Perform an HTTP GET check against a monitor.
  * @param {{ id: string, name: string, url: string, expectedStatus: number[] }} monitor
  * @returns {Promise<object>} result
  */
@@ -23,21 +23,12 @@ export async function checkHttp(monitor) {
   const timer = setTimeout(() => controller.abort(), 10_000);
 
   try {
-    let response = await fetch(monitor.url, {
-      method: "HEAD",
+    const response = await fetch(monitor.url, {
+      method: "GET",
       redirect: "follow",
       signal: controller.signal,
     });
-
-    // Some servers don't support HEAD — fall back to GET and discard the body
-    if (response.status === 405) {
-      response = await fetch(monitor.url, {
-        method: "GET",
-        redirect: "follow",
-        signal: controller.signal,
-      });
-      await response.body?.cancel();
-    }
+    await response.body?.cancel();
 
     const ms = getTtfb() ?? (Date.now() - start);
     const ok = monitor.expectedStatus.includes(response.status);
