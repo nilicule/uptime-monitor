@@ -20,7 +20,7 @@ check_deps() {
 
 get_config() {
   local raw
-  raw=$(wrangler kv key get --binding=UPTIME_KV --remote "config:monitors" 2>/dev/null) || true
+  raw=$(wrangler kv key get --binding=UPTIME_KV --remote --preview false "config:monitors" 2>/dev/null) || true
   if echo "$raw" | jq -e . >/dev/null 2>&1; then
     echo "$raw"
   else
@@ -30,10 +30,14 @@ get_config() {
 
 put_config() {
   local json="$1"
+  local tmp
+  tmp=$(mktemp)
+  echo "$json" > "$tmp"
   # Write to KV
-  echo "$json" | wrangler kv key put --binding=UPTIME_KV --remote "config:monitors" --stdin
+  wrangler kv key put --binding=UPTIME_KV --remote --preview false "config:monitors" --path="$tmp"
   # Re-set the secret
   echo "$json" | wrangler secret put MONITORS_CONFIG
+  rm -f "$tmp"
 }
 
 slugify() {
@@ -132,6 +136,8 @@ cmd_add() {
       '{id: $id, name: $name, type: "http", url: $url, expectedStatus: $expectedStatus}')
   else
     read -rp "Host: " HOST
+    # Strip scheme (https://, http://) and any trailing path
+    HOST=$(echo "$HOST" | sed 's|^[a-zA-Z][a-zA-Z0-9+.-]*://||' | cut -d'/' -f1)
     read -rp "Port: " PORT
     NEW_ENTRY=$(jq -n \
       --arg id "$ID" \
@@ -207,6 +213,18 @@ cmd_remove() {
   UPDATED=$(echo "$CURRENT" | jq --argjson idx "$IDX" 'del(.[$idx])')
   put_config "$UPDATED"
 
+  # Clean up all KV data for the removed monitor
+  echo "Cleaning up KV data for '$ENTRY_ID'..."
+  wrangler kv key delete --binding=UPTIME_KV --remote --preview false "latest:${ENTRY_ID}" 2>/dev/null || true
+  wrangler kv key delete --binding=UPTIME_KV --remote --preview false "events:${ENTRY_ID}" 2>/dev/null || true
+  wrangler kv key delete --binding=UPTIME_KV --remote --preview false "maintenance:${ENTRY_ID}" 2>/dev/null || true
+  SUMMARY_KEYS=$(wrangler kv key list --binding=UPTIME_KV --remote --preview false --prefix "summary:${ENTRY_ID}:" 2>/dev/null | jq -r '.[].name' 2>/dev/null) || SUMMARY_KEYS=""
+  if [[ -n "$SUMMARY_KEYS" ]]; then
+    while IFS= read -r key; do
+      wrangler kv key delete --binding=UPTIME_KV --remote --preview false "$key" 2>/dev/null || true
+    done <<< "$SUMMARY_KEYS"
+  fi
+
   echo ""
   echo "Monitor '$ENTRY_NAME' removed successfully."
 }
@@ -244,12 +262,16 @@ cmd_maintenance() {
         --argjson expiresAt "$EXPIRES_AT" \
         '{active: $active, message: (if $message == "" then null else $message end), startedAt: $startedAt, expiresAt: $expiresAt}')
 
-      echo "$MAINT_JSON" | wrangler kv key put --binding=UPTIME_KV --remote "maintenance:${ID}" --stdin
+      local MAINT_TMP
+      MAINT_TMP=$(mktemp)
+      echo "$MAINT_JSON" > "$MAINT_TMP"
+      wrangler kv key put --binding=UPTIME_KV --remote --preview false "maintenance:${ID}" --path="$MAINT_TMP"
+      rm -f "$MAINT_TMP"
 
       # Append maintenance_start event immediately
       local CUTOFF=$((NOW - 90 * 24 * 3600))
       local EXISTING_EVENTS
-      EXISTING_EVENTS=$(wrangler kv key get --binding=UPTIME_KV --remote "events:${ID}" 2>/dev/null) || EXISTING_EVENTS="[]"
+      EXISTING_EVENTS=$(wrangler kv key get --binding=UPTIME_KV --remote --preview false "events:${ID}" 2>/dev/null) || EXISTING_EVENTS="[]"
       if ! echo "$EXISTING_EVENTS" | jq -e . >/dev/null 2>&1; then
         EXISTING_EVENTS="[]"
       fi
@@ -267,7 +289,11 @@ cmd_maintenance() {
         --argjson event "$NEW_EVENT" \
         '[.[] | select(.ts >= $cutoff)] + [$event]')
 
-      echo "$UPDATED_EVENTS" | wrangler kv key put --binding=UPTIME_KV --remote "events:${ID}" --expiration-ttl=7776000 --stdin
+      local EVENTS_TMP
+      EVENTS_TMP=$(mktemp)
+      echo "$UPDATED_EVENTS" > "$EVENTS_TMP"
+      wrangler kv key put --binding=UPTIME_KV --remote --preview false "events:${ID}" --expiration-ttl=7776000 --path="$EVENTS_TMP"
+      rm -f "$EVENTS_TMP"
 
       echo ""
       echo "Maintenance mode enabled for '$ID'."
@@ -285,7 +311,7 @@ cmd_maintenance() {
         exit 1
       fi
 
-      wrangler kv key delete --binding=UPTIME_KV --remote "maintenance:${ID}"
+      wrangler kv key delete --binding=UPTIME_KV --remote --preview false "maintenance:${ID}"
 
       echo ""
       echo "Maintenance mode disabled for '$ID'."
@@ -307,7 +333,7 @@ cmd_maintenance() {
       NOW=$(date +%s)
 
       local EXISTING
-      EXISTING=$(wrangler kv key get --binding=UPTIME_KV --remote "maintenance:${ID}" 2>/dev/null) || EXISTING=""
+      EXISTING=$(wrangler kv key get --binding=UPTIME_KV --remote --preview false "maintenance:${ID}" 2>/dev/null) || EXISTING=""
 
       if [[ -z "$EXISTING" ]] || ! echo "$EXISTING" | jq -e '.active == true' >/dev/null 2>&1; then
         echo "Error: no active maintenance mode found for '$ID'" >&2
@@ -327,7 +353,11 @@ cmd_maintenance() {
       local UPDATED
       UPDATED=$(echo "$EXISTING" | jq --argjson expires "$NEW_EXPIRES" '.expiresAt = $expires')
 
-      echo "$UPDATED" | wrangler kv key put --binding=UPTIME_KV --remote "maintenance:${ID}" --stdin
+      local EXTEND_TMP
+      EXTEND_TMP=$(mktemp)
+      echo "$UPDATED" > "$EXTEND_TMP"
+      wrangler kv key put --binding=UPTIME_KV --remote --preview false "maintenance:${ID}" --path="$EXTEND_TMP"
+      rm -f "$EXTEND_TMP"
 
       echo ""
       echo "Maintenance window extended for '$ID'."
@@ -343,7 +373,7 @@ cmd_maintenance() {
       echo ""
       if [[ -n "$ID" ]]; then
         local DATA
-        DATA=$(wrangler kv key get --binding=UPTIME_KV --remote "maintenance:${ID}" 2>/dev/null) || DATA=""
+        DATA=$(wrangler kv key get --binding=UPTIME_KV --remote --preview false "maintenance:${ID}" 2>/dev/null) || DATA=""
         echo "Maintenance status for '$ID':"
         if [[ -z "$DATA" ]] || ! echo "$DATA" | jq -e '.active == true' >/dev/null 2>&1; then
           echo "  Not in maintenance"
@@ -355,7 +385,7 @@ cmd_maintenance() {
         echo ""
         while IFS= read -r mid; do
           local DATA NAME
-          DATA=$(wrangler kv key get --binding=UPTIME_KV --remote "maintenance:${mid}" 2>/dev/null) || DATA=""
+          DATA=$(wrangler kv key get --binding=UPTIME_KV --remote --preview false "maintenance:${mid}" 2>/dev/null) || DATA=""
           NAME=$(echo "$MONITORS" | jq -r --arg id "$mid" '.[] | select(.id == $id) | .name')
           if [[ -z "$DATA" ]] || ! echo "$DATA" | jq -e '.active == true' >/dev/null 2>&1; then
             echo "  $NAME ($mid): operational"
