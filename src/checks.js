@@ -24,7 +24,6 @@ async function attemptHttp(monitor, start) {
       method: "GET",
       redirect: "follow",
       signal: controller.signal,
-      cache: "no-store",
       headers: { "User-Agent": "UptimeMonitor/1.0" },
       cf: { cacheTtlByStatus: { "100-599": -1 } },
     });
