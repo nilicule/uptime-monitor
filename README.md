@@ -92,6 +92,22 @@ While in maintenance:
 
 Duration format: `30m` (minutes), `2h` (hours), `1d` (days).
 
+## Notifications
+
+Get alerted when a service goes down or recovers. Supports Discord webhooks and email (via Cloudflare Email Workers), configurable independently — enable either or both by setting a secret.
+
+```bash
+# Discord
+echo '{"webhookUrl":"https://discord.com/api/webhooks/..."}' \
+  | wrangler secret put NOTIFICATION_DISCORD
+
+# Email (also requires uncommenting [[send_email]] in wrangler.toml)
+echo '{"from":"alerts@yourdomain.com","to":"you@example.com"}' \
+  | wrangler secret put NOTIFICATION_EMAIL
+```
+
+See [docs/notifications.md](docs/notifications.md) for full setup instructions.
+
 ## License
 
 [CC BY-NC 4.0](LICENSE) — free to use and modify, attribution required, no commercial use.

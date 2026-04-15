@@ -131,6 +131,36 @@ echo ""
 
 echo "$MONITORS_JSON" | wrangler secret put MONITORS_CONFIG
 
+# ─── Configure notifications (optional) ──────────────────────────────────────
+
+echo ""
+echo "─────────────────────────────────────────────────────────────────"
+echo " Notifications (optional — you can skip this and set up later)"
+echo " See docs/notifications.md for full details."
+echo "─────────────────────────────────────────────────────────────────"
+
+echo ""
+read -rp "Set up Discord webhook notifications? [y/N]: " SETUP_DISCORD
+if [[ "${SETUP_DISCORD,,}" == "y" ]]; then
+  read -rp "  Discord webhook URL: " DISCORD_URL
+  echo "{\"webhookUrl\":\"$DISCORD_URL\"}" | wrangler secret put NOTIFICATION_DISCORD
+  echo "  Discord notifications configured."
+fi
+
+echo ""
+read -rp "Set up email notifications? [y/N]: " SETUP_EMAIL
+if [[ "${SETUP_EMAIL,,}" == "y" ]]; then
+  echo "  Email requires Cloudflare Email Routing on your domain."
+  echo "  See docs/notifications.md for setup steps before proceeding."
+  echo ""
+  read -rp "  From address (on your Cloudflare-managed domain): " EMAIL_FROM
+  read -rp "  To address: " EMAIL_TO
+  echo "{\"from\":\"$EMAIL_FROM\",\"to\":\"$EMAIL_TO\"}" | wrangler secret put NOTIFICATION_EMAIL
+  echo ""
+  echo "  Email notifications configured."
+  echo "  IMPORTANT: uncomment the [[send_email]] block in wrangler.toml before deploying."
+fi
+
 echo ""
 echo "════════════════════════════════════════════════════════════════"
 echo " Bootstrap complete!"

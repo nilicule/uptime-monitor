@@ -1,5 +1,6 @@
 import { checkHttp, checkTcp } from "./checks.js";
 import { getPage } from "./page.js";
+import { sendNotification } from "./notify.js";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -108,10 +109,14 @@ async function getMaintenanceState(kv, id) {
   return data;
 }
 
-/** Append an event to events:{id}, pruning entries older than 90 days. */
-async function appendEvent(kv, id, event) {
+/**
+ * Append an event to events:{id}, pruning entries older than 90 days.
+ * If existingEvents is provided it is used directly (avoids a second KV read
+ * when the caller already fetched the array).
+ */
+async function appendEvent(kv, id, event, existingEvents) {
   const cutoff90d = Math.floor(Date.now() / 1000) - TTL_90D;
-  const existing = (await kv.get(`events:${id}`, "json")) || [];
+  const existing = existingEvents ?? (await kv.get(`events:${id}`, "json")) ?? [];
   const pruned = existing.filter((e) => e.ts >= cutoff90d);
   pruned.push(event);
   await kv.put(`events:${id}`, JSON.stringify(pruned), { expirationTtl: TTL_90D });
@@ -153,10 +158,11 @@ async function writeResult(kv, result, maintenance) {
 }
 
 /**
- * Compare previous and current check state, write events on transitions.
+ * Compare previous and current check state, write events on transitions,
+ * and fire notifications for down/up transitions.
  * maintenance_start is written by the CLI; the worker only writes maintenance_end.
  */
-async function detectAndWriteEvents(kv, result, prevResult) {
+async function detectAndWriteEvents(kv, env, result, prevResult) {
   const events = [];
   const now = result.ts;
 
@@ -178,9 +184,23 @@ async function detectAndWriteEvents(kv, result, prevResult) {
     }
   }
 
+  if (!events.length) return;
+
+  // Read events array once — reused for notification duration calc and appendEvent.
+  const monitor = { id: result.id, name: result.name };
+  const existingEvents = (await kv.get(`events:${result.id}`, "json")) || [];
+
   // Sequential: appendEvent does read-modify-write on the same key; must not run in parallel.
+  // After the first append, pass the updated array forward so subsequent appends don't re-read.
+  let current = existingEvents;
   for (const event of events) {
-    await appendEvent(kv, result.id, event);
+    if (event.type === "down" || event.type === "up") {
+      await sendNotification(kv, env, monitor, event, existingEvents);
+    }
+    await appendEvent(kv, result.id, event, current);
+    // Rebuild current to reflect the appended event for the next iteration.
+    const cutoff90d = Math.floor(Date.now() / 1000) - TTL_90D;
+    current = [...current.filter((e) => e.ts >= cutoff90d), event];
   }
 }
 
@@ -188,7 +208,7 @@ async function detectAndWriteEvents(kv, result, prevResult) {
  * Run a single monitor check: read previous state + maintenance state,
  * execute check, write result and events.
  */
-async function runMonitor(kv, monitor) {
+async function runMonitor(kv, env, monitor) {
   const [prevResult, maintenance] = await Promise.all([
     kv.get(`latest:${monitor.id}`, "json"),
     getMaintenanceState(kv, monitor.id),
@@ -197,7 +217,7 @@ async function runMonitor(kv, monitor) {
   const result = await runCheck(monitor);
   result.excluded = result.statusCode === 521;
   await writeResult(kv, result, maintenance);
-  await detectAndWriteEvents(kv, result, prevResult);
+  await detectAndWriteEvents(kv, env, result, prevResult);
   return result;
 }
 
@@ -297,7 +317,7 @@ async function handleScheduled(env) {
   await syncConfigMirror(env, monitors);
 
   // Run all monitors (each reads its own prev state + maintenance state)
-  const results = await Promise.all(monitors.map((m) => runMonitor(env.UPTIME_KV, m)));
+  const results = await Promise.all(monitors.map((m) => runMonitor(env.UPTIME_KV, env, m)));
 
   // Rebuild and store the dashboard snapshot
   const snapshot = await buildSnapshot(env.UPTIME_KV, monitors);

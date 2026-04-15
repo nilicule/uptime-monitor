@@ -10,3 +10,9 @@ crons = ["*/5 * * * *"]
 binding = "UPTIME_KV"
 id = "placeholder"
 preview_id = "placeholder"
+
+# Optional: uncomment to enable email notifications via Cloudflare Email Workers.
+# Requires Cloudflare Email Routing to be configured on your domain.
+# See docs/notifications.md for setup instructions.
+# [[send_email]]
+# name = "EMAIL"
