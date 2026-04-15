@@ -108,7 +108,7 @@ Monitors are stored as a Cloudflare Worker secret named `MONITORS_CONFIG` (a JSO
 
 ```json
 [
-  { "id": "plex", "name": "Plex", "type": "http", "url": "https://plex.example.com", "expectedStatus": [200, 401] },
+  { "id": "plex", "name": "Plex", "type": "http", "url": "https://plex.example.com" },
   { "id": "nas",  "name": "NAS",  "type": "tcp",  "host": "nas.example.com", "port": 5000 }
 ]
 ```
@@ -120,7 +120,7 @@ Monitors are stored as a Cloudflare Worker secret named `MONITORS_CONFIG` (a JSO
 Secrets set via `wrangler secret put` are only available in deployed workers. For local dev, create a `.dev.vars` file (gitignored):
 
 ```
-MONITORS_CONFIG=[{"id":"plex","name":"Plex","type":"http","url":"https://plex.example.com","expectedStatus":[200,401]}]
+MONITORS_CONFIG=[{"id":"plex","name":"Plex","type":"http","url":"https://plex.example.com"}]
 ```
 
 ### 2. Start the dev server

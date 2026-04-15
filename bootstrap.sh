@@ -54,14 +54,9 @@ add_monitor_interactive() {
   local NEW_ENTRY
   if [[ "$TYPE" == "http" ]]; then
     read -rp "URL: " URL
-    read -rp "Expected status codes (comma-separated) [200]: " STATUS_RAW
-    STATUS_RAW="${STATUS_RAW:-200}"
-    local STATUS_JSON
-    STATUS_JSON=$(echo "$STATUS_RAW" | tr ',' '\n' | sed 's/[[:space:]]//g' | jq -R 'tonumber' | jq -s '.')
     NEW_ENTRY=$(jq -n \
       --arg id "$ID" --arg name "$NAME" --arg url "$URL" \
-      --argjson expectedStatus "$STATUS_JSON" \
-      '{id: $id, name: $name, type: "http", url: $url, expectedStatus: $expectedStatus}')
+      '{id: $id, name: $name, type: "http", url: $url}')
   else
     read -rp "Host: " HOST
     read -rp "Port: " PORT

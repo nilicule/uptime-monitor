@@ -31,7 +31,7 @@ async function attemptHttp(monitor, start) {
     await response.body?.cancel();
 
     const ms = getTtfb() ?? (Date.now() - start);
-    const ok = monitor.expectedStatus.includes(response.status);
+    const ok = true; // any response means the port is up
 
     return {
       id: monitor.id,
@@ -70,7 +70,7 @@ async function attemptHttp(monitor, start) {
 
 /**
  * Perform an HTTP GET check against a monitor, with up to 3 attempts.
- * @param {{ id: string, name: string, url: string, expectedStatus: number[] }} monitor
+ * @param {{ id: string, name: string, url: string }} monitor
  * @returns {Promise<object>} result
  */
 export async function checkHttp(monitor) {
