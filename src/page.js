@@ -194,8 +194,9 @@ export function getPage() {
     .bars-wrap { width: 100%; overflow: hidden; }
     .bars { display: flex; gap: 1px; height: 28px; align-items: stretch; }
     .bar { flex: 1; border-radius: 1px; min-width: 0; }
-    .bar.ok      { background: var(--ok-bar); }
-    .bar.partial { background: var(--partial); }
+    .bar.ok       { background: var(--ok-bar); }
+    .bar.near-ok  { background: var(--near-ok-bar); }
+    .bar.partial  { background: var(--partial); }
     .bar.down    { background: var(--down-bar); }
     .bar.nodata       { background: var(--muted3); }
     .bar.maintenance  { background: var(--maintenance-bar); }
