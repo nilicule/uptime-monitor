@@ -450,6 +450,7 @@ export function getPage() {
       if (slot.ok + (slot.excluded || 0) >= slot.total && slot.excluded > 0) return 'excluded';
       if (slot.ok === slot.total)     return 'ok';
       if (slot.ok === 0)              return 'down';
+      if (slot.ok / slot.total >= 0.99) return 'near-ok';
       return 'partial';
     }
 
