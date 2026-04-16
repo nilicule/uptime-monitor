@@ -20,7 +20,7 @@ export function getPage() {
       --muted3:    #334155;
       --ok:          #22c55e;
       --ok-bar:      #16a34a;
-      --near-ok-bar: #4ade80;
+      --near-ok-bar: rgba(34,197,94,.4);
       --ok-glow:   rgba(34,197,94,.2);
       --ok-glow2:  rgba(34,197,94,.05);
       --down:      #ef4444;
@@ -47,7 +47,7 @@ export function getPage() {
       --muted3:    #cbd5e1;
       --ok:          #16a34a;
       --ok-bar:      #16a34a;
-      --near-ok-bar: #22c55e;
+      --near-ok-bar: rgba(22,163,74,.4);
       --ok-glow:   rgba(22,163,74,.2);
       --ok-glow2:  rgba(22,163,74,.05);
       --down:      #dc2626;
