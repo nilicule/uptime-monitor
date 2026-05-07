@@ -215,10 +215,9 @@ async function runMonitor(kv, env, monitor) {
   ]);
 
   const result = await runCheck(monitor);
-  result.excluded = result.statusCode === 521;
   await writeResult(kv, result, maintenance);
   await detectAndWriteEvents(kv, env, result, prevResult);
-  return result;
+  return { result, maintenance };
 }
 
 // ─── Dashboard snapshot builder ───────────────────────────────────────────────
@@ -269,12 +268,14 @@ async function buildSnapshot(kv, monitors) {
         const effectiveOk    = Math.max(0, data.ok - mOk - exclOk);
 
         bars.push({
-          hour:        new Date(ts * 1000).toISOString(),
-          ok:          data.ok,
-          total:       data.checks,
-          maintenance: m,
-          excluded:    excl,
-          avgMs:       data.avgMs,
+          hour:          new Date(ts * 1000).toISOString(),
+          ok:            data.ok,
+          total:         data.checks,
+          maintenance:   m,
+          maintenanceOk: mOk,
+          excluded:      excl,
+          excludedOk:    exclOk,
+          avgMs:         data.avgMs,
         });
 
         checks90 += effectiveTotal; ok90 += effectiveOk;
@@ -308,6 +309,109 @@ async function buildSnapshot(kv, monitors) {
   return { generatedAt: now, monitors: monitorSnapshots };
 }
 
+// ─── Incremental snapshot updater ─────────────────────────────────────────────
+
+/**
+ * Update an existing snapshot in-memory using the latest run outputs.
+ * Only touches the current hour's bar per monitor — no KV reads required.
+ * Falls back gracefully for older bars that lack maintenanceOk/excludedOk.
+ */
+function updateSnapshotIncremental(existing, monitors, runOutputs, now) {
+  const cutoff90d = now - 90 * 24 * 3600;
+  const cutoff30d = now - 30 * 24 * 3600;
+  const cutoff7d  = now - 7  * 24 * 3600;
+  const cutoff24h = now - 24 * 3600;
+
+  const outputMap   = new Map(runOutputs.map(({ result, maintenance }) => [result.id, { result, maintenance }]));
+  const existingMap = new Map((existing.monitors || []).map((m) => [m.id, m]));
+  const pct = (ok, total) => total === 0 ? null : Math.round((ok / total) * 10000) / 100;
+
+  const updatedMonitors = monitors.map((monitor) => {
+    const { result, maintenance } = outputMap.get(monitor.id) || {};
+    const existingMonitor = existingMap.get(monitor.id);
+
+    let bars = (existingMonitor?.bars || []).filter(
+      (b) => new Date(b.hour).getTime() / 1000 >= cutoff90d
+    );
+
+    if (result) {
+      const tagged = { ...result, maintenance: !!maintenance };
+      const d = new Date(result.ts * 1000);
+      d.setUTCMinutes(0, 0, 0);
+      const hourISO = d.toISOString();
+
+      const idx = bars.findIndex((b) => b.hour === hourISO);
+      if (idx >= 0) {
+        const bar = { ...bars[idx] };
+        const prevTotal = bar.avgMs * bar.total;
+        bar.total += 1;
+        if (tagged.ok) bar.ok += 1;
+        if (tagged.maintenance) {
+          bar.maintenance   = (bar.maintenance   || 0) + 1;
+          if (tagged.ok) bar.maintenanceOk = (bar.maintenanceOk || 0) + 1;
+        }
+        if (tagged.excluded) {
+          bar.excluded    = (bar.excluded    || 0) + 1;
+          if (tagged.ok) bar.excludedOk = (bar.excludedOk || 0) + 1;
+        }
+        bar.avgMs = Math.round((prevTotal + result.ms) / bar.total);
+        bars[idx] = bar;
+      } else {
+        bars.push({
+          hour:          hourISO,
+          ok:            tagged.ok          ? 1 : 0,
+          total:         1,
+          maintenance:   tagged.maintenance ? 1 : 0,
+          maintenanceOk: (tagged.maintenance && tagged.ok) ? 1 : 0,
+          excluded:      tagged.excluded    ? 1 : 0,
+          excludedOk:    (tagged.excluded   && tagged.ok) ? 1 : 0,
+          avgMs:         result.ms,
+        });
+        bars.sort((a, b) => a.hour.localeCompare(b.hour));
+      }
+    }
+
+    let checks90 = 0, ok90 = 0;
+    let checks30 = 0, ok30 = 0;
+    let checks7  = 0, ok7  = 0, totalMs7 = 0;
+    let checks24 = 0, ok24 = 0;
+
+    for (const bar of bars) {
+      const ts     = new Date(bar.hour).getTime() / 1000;
+      if (ts < cutoff90d) continue;
+      const m      = bar.maintenance   || 0;
+      const mOk    = bar.maintenanceOk || 0;
+      const excl   = bar.excluded      || 0;
+      const exclOk = bar.excludedOk    || 0;
+      const effTotal = Math.max(0, bar.total - m - excl);
+      const effOk    = Math.max(0, bar.ok   - mOk - exclOk);
+      checks90 += effTotal; ok90 += effOk;
+      if (ts >= cutoff30d) { checks30 += effTotal; ok30 += effOk; }
+      if (ts >= cutoff7d)  { checks7  += effTotal; ok7  += effOk; totalMs7 += bar.avgMs * effTotal; }
+      if (ts >= cutoff24h) { checks24 += effTotal; ok24 += effOk; }
+    }
+
+    return {
+      id:         monitor.id,
+      name:       monitor.name,
+      latest:     result
+        ? { ...result, maintenance: !!maintenance }
+        : (existingMonitor?.latest || null),
+      maintenance: maintenance
+        ? { active: true, message: maintenance.message || null, startedAt: maintenance.startedAt, expiresAt: maintenance.expiresAt }
+        : null,
+      uptime24h:  pct(ok24,  checks24),
+      uptime7d:   pct(ok7,   checks7),
+      uptime30d:  pct(ok30,  checks30),
+      uptime90d:  pct(ok90,  checks90),
+      avgMs7d:    checks7 === 0 ? null : Math.round(totalMs7 / checks7),
+      bars,
+    };
+  });
+
+  return { generatedAt: now, monitors: updatedMonitors };
+}
+
 // ─── Scheduled handler ────────────────────────────────────────────────────────
 
 async function handleScheduled(env) {
@@ -316,14 +420,20 @@ async function handleScheduled(env) {
 
   await syncConfigMirror(env, monitors);
 
-  // Run all monitors (each reads its own prev state + maintenance state)
-  const results = await Promise.all(monitors.map((m) => runMonitor(env.UPTIME_KV, env, m)));
+  // Read existing snapshot and run all monitor checks in parallel.
+  // If no snapshot exists yet (first deploy or cleared), fall back to full rebuild.
+  const [existingSnapshot, runOutputs] = await Promise.all([
+    env.UPTIME_KV.get("dashboard:snapshot", "json"),
+    Promise.all(monitors.map((m) => runMonitor(env.UPTIME_KV, env, m))),
+  ]);
 
-  // Rebuild and store the dashboard snapshot
-  const snapshot = await buildSnapshot(env.UPTIME_KV, monitors);
+  const now = Math.floor(Date.now() / 1000);
+  const snapshot = existingSnapshot
+    ? updateSnapshotIncremental(existingSnapshot, monitors, runOutputs, now)
+    : await buildSnapshot(env.UPTIME_KV, monitors);
+
   await env.UPTIME_KV.put("dashboard:snapshot", JSON.stringify(snapshot));
-
-  console.log(`Check round complete. ${results.length} monitors checked.`);
+  console.log(`Check round complete. ${runOutputs.length} monitors checked.`);
 }
 
 // ─── Edge cache helper ────────────────────────────────────────────────────────
