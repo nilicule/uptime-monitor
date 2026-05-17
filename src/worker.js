@@ -215,6 +215,7 @@ async function runMonitor(kv, env, monitor) {
   ]);
 
   const result = await runCheck(monitor);
+  result.excluded = result.statusCode === 521;
   await writeResult(kv, result, maintenance);
   await detectAndWriteEvents(kv, env, result, prevResult);
   return { result, maintenance };
@@ -261,9 +262,9 @@ async function buildSnapshot(kv, monitors) {
         if (!data || ts < cutoff90d) continue;
 
         const m              = data.maintenance   || 0;
-        const mOk            = data.maintenanceOk || 0;
+        const mOk            = data.maintenanceOk ?? m;
         const excl           = data.excluded      || 0;
-        const exclOk         = data.excludedOk    || 0;
+        const exclOk         = data.excludedOk    ?? excl;
         const effectiveTotal = Math.max(0, data.checks - m - excl);
         const effectiveOk    = Math.max(0, data.ok - mOk - exclOk);
 
@@ -380,9 +381,12 @@ function updateSnapshotIncremental(existing, monitors, runOutputs, now) {
       const ts     = new Date(bar.hour).getTime() / 1000;
       if (ts < cutoff90d) continue;
       const m      = bar.maintenance   || 0;
-      const mOk    = bar.maintenanceOk || 0;
+      // Older bars (built before the incremental updater) lack the *Ok counters.
+      // A missing field means "never recorded", not "zero were ok" — fall back to
+      // the full count so effOk and effTotal subtract the same amount (uptime ≤ 100%).
+      const mOk    = bar.maintenanceOk ?? m;
       const excl   = bar.excluded      || 0;
-      const exclOk = bar.excludedOk    || 0;
+      const exclOk = bar.excludedOk    ?? excl;
       const effTotal = Math.max(0, bar.total - m - excl);
       const effOk    = Math.max(0, bar.ok   - mOk - exclOk);
       checks90 += effTotal; ok90 += effOk;
