@@ -21,8 +21,14 @@ uptime-monitor/
 
 | Type | Method | Timeout | What's measured |
 |------|--------|---------|-----------------|
-| `http` | HEAD (falls back to GET on 405), follows redirects | 10 s | Status code, response time, final URL |
+| `http` | GET, follows redirects | 10 s | Status code, response time, final URL |
 | `tcp` | `cloudflare:sockets` connect | 5 s | TCP connect latency |
+
+Each check makes up to 3 attempts (with 300 ms / 900 ms backoff) before recording a
+result. A failed connection is retried, as is a Cloudflare-synthesized 52x response —
+these are emitted by Workers' egress when it can't reach the origin (not a real
+response from the server) and are usually transient. A 52x that survives every retry
+means the origin is genuinely unreachable and is recorded as **down**.
 
 ## KV data model
 
@@ -87,8 +93,8 @@ Hourly summary buckets (`summary:{id}:{YYYY-MM-DD-HH}`) aggregate per-hour check
 | `ok` | Checks that returned a successful result |
 | `maintenance` | Checks that ran while the monitor was in maintenance mode |
 | `maintenanceOk` | Maintenance checks that were also `ok` |
-| `excluded` | Checks excluded from uptime (e.g. HTTP 521 Cloudflare errors) |
-| `excludedOk` | Excluded checks that were also `ok` |
+| `excluded` | Legacy: checks excluded from uptime. No longer written — 52x is now recorded as down (see above). Retained so historical buckets aggregate correctly. |
+| `excludedOk` | Legacy: excluded checks that were also `ok` |
 | `avgMs` / `minMs` / `maxMs` | Response time stats across all checks in the hour |
 
 Uptime % is calculated as `(ok - maintenanceOk - excludedOk) / (checks - maintenance - excluded)`.

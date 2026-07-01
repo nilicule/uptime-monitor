@@ -15,6 +15,13 @@ function getTtfb() {
 const RETRY_DELAYS = [300, 900];
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// Cloudflare 52x codes (521 "web server is down", 522/524 timeouts, etc.) on an
+// outbound fetch are synthesized by Cloudflare's egress when it can't complete the
+// connection to the origin — not a real response from the server. A one-off is
+// usually transient (so we retry), but a 52x that survives every retry means the
+// origin is genuinely unreachable — i.e. down.
+const isTransientStatus = (code) => typeof code === "number" && code >= 520 && code <= 530;
+
 async function attemptHttp(monitor, start) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 10_000);
@@ -77,8 +84,15 @@ export async function checkHttp(monitor) {
   let result;
   for (let i = 0; i <= RETRY_DELAYS.length; i++) {
     result = await attemptHttp(monitor, start);
-    if (result.ok) return result;
+    // A 52x is `ok: true` but transient — retry it instead of recording immediately.
+    if (result.ok && !isTransientStatus(result.statusCode)) return result;
     if (i < RETRY_DELAYS.length) await sleep(RETRY_DELAYS[i]);
+  }
+  // A 52x that survived every retry means Cloudflare's egress never reached the
+  // origin — record it as down rather than a successful response.
+  if (result.ok && isTransientStatus(result.statusCode)) {
+    result.ok = false;
+    result.error = `HTTP ${result.statusCode}`;
   }
   return result;
 }
