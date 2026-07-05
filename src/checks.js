@@ -12,7 +12,11 @@ function getTtfb() {
   return null;
 }
 
-const RETRY_DELAYS = [300, 900];
+// Retries are spread across ~10s (four attempts total) so a brief hiccup on the
+// Cloudflare-egress → origin path — which surfaces as "The operation was aborted"
+// or a 52x — has to persist across the whole window to be recorded as down. Tight
+// back-to-back retries all land inside the same blip and produce false positives.
+const RETRY_DELAYS = [1000, 3000, 6000];
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // Cloudflare 52x codes (521 "web server is down", 522/524 timeouts, etc.) on an
@@ -23,8 +27,11 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const isTransientStatus = (code) => typeof code === "number" && code >= 520 && code <= 530;
 
 async function attemptHttp(monitor, start) {
+  // start is the round timestamp (used for ts); attemptStart measures this attempt's
+  // latency so retry wait time between attempts doesn't inflate the reported ms.
+  const attemptStart = Date.now();
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 10_000);
+  const timer = setTimeout(() => controller.abort(), 12_000);
 
   try {
     const response = await fetch(monitor.url, {
@@ -36,7 +43,7 @@ async function attemptHttp(monitor, start) {
     });
     await response.body?.cancel();
 
-    const ms = getTtfb() ?? (Date.now() - start);
+    const ms = getTtfb() ?? (Date.now() - attemptStart);
     const ok = true; // any response means the port is up
 
     return {
@@ -54,7 +61,7 @@ async function attemptHttp(monitor, start) {
       colo: null, // cf.colo is only available on inbound requests, not outbound fetch responses
     };
   } catch (err) {
-    const ms = Date.now() - start;
+    const ms = Date.now() - attemptStart;
     return {
       id: monitor.id,
       name: monitor.name,
@@ -75,7 +82,7 @@ async function attemptHttp(monitor, start) {
 }
 
 /**
- * Perform an HTTP GET check against a monitor, with up to 3 attempts.
+ * Perform an HTTP GET check against a monitor, with up to 4 attempts spread over ~10s.
  * @param {{ id: string, name: string, url: string }} monitor
  * @returns {Promise<object>} result
  */
@@ -98,6 +105,9 @@ export async function checkHttp(monitor) {
 }
 
 async function attemptTcp(monitor, start) {
+  // start is the round timestamp (used for ts); attemptStart measures this attempt's
+  // connect latency so retry wait time between attempts doesn't inflate the reported ms.
+  const attemptStart = Date.now();
   const timeoutPromise = new Promise((_, reject) =>
     setTimeout(() => reject(new Error("TCP connect timeout after 5s")), 5_000)
   );
@@ -105,7 +115,7 @@ async function attemptTcp(monitor, start) {
   const connectPromise = (async () => {
     const socket = connect({ hostname: monitor.host, port: monitor.port });
     await socket.opened;
-    const ms = Date.now() - start;
+    const ms = Date.now() - attemptStart;
     try { socket.close(); } catch { /* ignore close errors */ }
     return ms;
   })();
@@ -128,7 +138,7 @@ async function attemptTcp(monitor, start) {
       colo: null,
     };
   } catch (err) {
-    const ms = Date.now() - start;
+    const ms = Date.now() - attemptStart;
     return {
       id: monitor.id,
       name: monitor.name,
@@ -147,7 +157,7 @@ async function attemptTcp(monitor, start) {
 }
 
 /**
- * Perform a TCP connect check against a monitor, with up to 3 attempts.
+ * Perform a TCP connect check against a monitor, with up to 4 attempts spread over ~10s.
  * @param {{ id: string, name: string, host: string, port: number }} monitor
  * @returns {Promise<object>} result
  */
