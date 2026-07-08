@@ -19,9 +19,11 @@ A self-hosted uptime monitor that runs entirely on Cloudflare's free tier. It ch
 
 API responses (`/api/snapshot`, `/api/monitor/:id`) are served through
 Cloudflare Workers Cache. The cron handler purges the relevant cache tags
-right after each check writes fresh data, so the status page updates
-immediately rather than waiting for a TTL to expire. Workers Cache is free
-on all plans, so this works on the free tier.
+right after each check writes fresh data, so the status page refreshes on the
+next request after each run rather than waiting out a TTL. (Purge is best-effort:
+KV's eventual consistency across distant colos means the update is near-instant,
+not strictly synchronous, and a `stale-while-revalidate` fallback bounds any
+missed purge.) Workers Cache is free on all plans, so this works on the free tier.
 
 ## Requirements
 
