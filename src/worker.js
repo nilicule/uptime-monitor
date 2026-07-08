@@ -490,7 +490,10 @@ async function handleFetch(request, env) {
 
   const monitorMatch = pathname.match(/^\/api\/monitor\/([^/]+)$/);
   if (monitorMatch) {
-    const id = monitorMatch[1];
+    // Decode so the KV lookup and the Cache-Tag use the raw config id — keeps
+    // the tag byte-identical to the one the cron purges (`monitor:${result.id}`),
+    // even if an id ever contains an encodable character.
+    const id = decodeURIComponent(monitorMatch[1]);
     const events = (await env.UPTIME_KV.get(`events:${id}`, "json")) || [];
     return new Response(JSON.stringify(events), {
       headers: {
