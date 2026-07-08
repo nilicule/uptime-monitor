@@ -15,6 +15,14 @@ A self-hosted uptime monitor that runs entirely on Cloudflare's free tier. It ch
 - Serves a status page at `/` with per-service uptime bars, a dynamic favicon, and a light/dark mode toggle
 - No external services, no database, no server to manage
 
+## Caching
+
+API responses (`/api/snapshot`, `/api/monitor/:id`) are served through
+Cloudflare Workers Cache. The cron handler purges the relevant cache tags
+right after each check writes fresh data, so the status page updates
+immediately rather than waiting for a TTL to expire. Workers Cache is free
+on all plans, so this works on the free tier.
+
 ## Requirements
 
 - A [Cloudflare account](https://dash.cloudflare.com/sign-up) (free tier is sufficient)
