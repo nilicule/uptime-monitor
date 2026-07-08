@@ -1,6 +1,7 @@
 import { checkHttp, checkTcp } from "./checks.js";
 import { getPage } from "./page.js";
 import { sendNotification } from "./notify.js";
+import { cache } from "cloudflare:workers";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -184,7 +185,7 @@ async function detectAndWriteEvents(kv, env, result, prevResult) {
     }
   }
 
-  if (!events.length) return;
+  if (!events.length) return false;
 
   // Read events array once — reused for notification duration calc and appendEvent.
   const monitor = { id: result.id, name: result.name };
@@ -202,6 +203,8 @@ async function detectAndWriteEvents(kv, env, result, prevResult) {
     const cutoff90d = Math.floor(Date.now() / 1000) - TTL_90D;
     current = [...current.filter((e) => e.ts >= cutoff90d), event];
   }
+
+  return true;
 }
 
 /**
@@ -216,8 +219,8 @@ async function runMonitor(kv, env, monitor) {
 
   const result = await runCheck(monitor);
   await writeResult(kv, result, maintenance);
-  await detectAndWriteEvents(kv, env, result, prevResult);
-  return { result, maintenance };
+  const eventsChanged = await detectAndWriteEvents(kv, env, result, prevResult);
+  return { result, maintenance, eventsChanged };
 }
 
 // ─── Dashboard snapshot builder ───────────────────────────────────────────────
@@ -436,6 +439,22 @@ async function handleScheduled(env) {
     : await buildSnapshot(env.UPTIME_KV, monitors);
 
   await env.UPTIME_KV.put("dashboard:snapshot", JSON.stringify(snapshot));
+
+  // Invalidate the edge cache now that fresh data is written. The dashboard
+  // snapshot changes every run; per-monitor detail pages only when their
+  // event log changed (up/down transition or maintenance_end).
+  const tags = [
+    "snapshot",
+    ...runOutputs
+      .filter((o) => o.eventsChanged)
+      .map((o) => `monitor:${o.result.id}`),
+  ];
+  try {
+    await cache.purge({ tags });
+  } catch (err) {
+    console.error("Cache purge failed:", err.message);
+  }
+
   console.log(`Check round complete. ${runOutputs.length} monitors checked.`);
 }
 
