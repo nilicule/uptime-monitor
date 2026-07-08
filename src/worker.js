@@ -439,23 +439,9 @@ async function handleScheduled(env) {
   console.log(`Check round complete. ${runOutputs.length} monitors checked.`);
 }
 
-// ─── Edge cache helper ────────────────────────────────────────────────────────
-
-// Cloudflare Workers are treated as dynamic origins — Cache-Control headers
-// alone do not activate the CDN cache. Using caches.default opts in explicitly.
-// Only 2xx responses are stored; errors/404s are served fresh every time.
-async function cachedFetch(request, ctx, handler) {
-  const cache = caches.default;
-  const cached = await cache.match(request);
-  if (cached) return cached;
-  const response = await handler();
-  if (response.ok) ctx.waitUntil(cache.put(request, response.clone()));
-  return response;
-}
-
 // ─── Fetch handler ─────────────────────────────────────────────────────────
 
-async function handleFetch(request, env, ctx) {
+async function handleFetch(request, env) {
   const url = new URL(request.url);
   const { pathname } = url;
 
@@ -467,34 +453,32 @@ async function handleFetch(request, env, ctx) {
   }
 
   if (pathname === "/api/snapshot") {
-    return cachedFetch(request, ctx, async () => {
-      const snapshot = await env.UPTIME_KV.get("dashboard:snapshot");
-      if (!snapshot) {
-        return new Response(JSON.stringify({ error: "No snapshot yet" }), {
-          status: 404,
-          headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
-        });
-      }
-      return new Response(snapshot, {
-        headers: {
-          "Content-Type": "application/json",
-          "Cache-Control": "public, max-age=300, s-maxage=300",
-        },
+    const snapshot = await env.UPTIME_KV.get("dashboard:snapshot");
+    if (!snapshot) {
+      return new Response(JSON.stringify({ error: "No snapshot yet" }), {
+        status: 404,
+        headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
       });
+    }
+    return new Response(snapshot, {
+      headers: {
+        "Content-Type": "application/json",
+        "Cache-Control": "public, max-age=3600, stale-while-revalidate=86400",
+        "Cache-Tag": "snapshot",
+      },
     });
   }
 
   const monitorMatch = pathname.match(/^\/api\/monitor\/([^/]+)$/);
   if (monitorMatch) {
-    return cachedFetch(request, ctx, async () => {
-      const id = monitorMatch[1];
-      const events = (await env.UPTIME_KV.get(`events:${id}`, "json")) || [];
-      return new Response(JSON.stringify(events), {
-        headers: {
-          "Content-Type": "application/json",
-          "Cache-Control": "public, max-age=300, s-maxage=300",
-        },
-      });
+    const id = monitorMatch[1];
+    const events = (await env.UPTIME_KV.get(`events:${id}`, "json")) || [];
+    return new Response(JSON.stringify(events), {
+      headers: {
+        "Content-Type": "application/json",
+        "Cache-Control": "public, max-age=3600, stale-while-revalidate=86400",
+        "Cache-Tag": `monitor:${id}`,
+      },
     });
   }
 
@@ -516,12 +500,12 @@ async function handleFetch(request, env, ctx) {
 // ─── Export ───────────────────────────────────────────────────────────────────
 
 export default {
-  async fetch(request, env, ctx) {
+  async fetch(request, env) {
     // Sync config mirror on cold start (only runs once per isolate lifetime)
     const monitors = parseConfig(env);
     if (monitors) await syncConfigMirrorOnce(env, monitors);
 
-    return handleFetch(request, env, ctx);
+    return handleFetch(request, env);
   },
 
   async scheduled(_event, env, ctx) {
