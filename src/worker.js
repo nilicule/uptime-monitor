@@ -460,6 +460,12 @@ async function handleScheduled(env) {
 
 // ─── Fetch handler ─────────────────────────────────────────────────────────
 
+// Edge TTL rides on its own header so `Cache-Control` stays browser-only: a
+// `max-age` there would let browsers hold a copy the cron's purge cannot reach.
+// Note `s-maxage`/`must-revalidate` would disable stale-while-revalidate, which
+// is why the edge directives are not expressed through `Cache-Control` at all.
+const EDGE_CACHE_CONTROL = "public, max-age=3600, stale-while-revalidate=86400";
+
 async function handleFetch(request, env) {
   const url = new URL(request.url);
   const { pathname } = url;
@@ -482,7 +488,8 @@ async function handleFetch(request, env) {
     return new Response(snapshot, {
       headers: {
         "Content-Type": "application/json",
-        "Cache-Control": "public, max-age=3600, stale-while-revalidate=86400",
+        "Cache-Control": "no-cache",
+        "Cloudflare-CDN-Cache-Control": EDGE_CACHE_CONTROL,
         "Cache-Tag": "snapshot",
       },
     });
@@ -498,7 +505,8 @@ async function handleFetch(request, env) {
     return new Response(JSON.stringify(events), {
       headers: {
         "Content-Type": "application/json",
-        "Cache-Control": "public, max-age=3600, stale-while-revalidate=86400",
+        "Cache-Control": "no-cache",
+        "Cloudflare-CDN-Cache-Control": EDGE_CACHE_CONTROL,
         "Cache-Tag": `monitor:${id}`,
       },
     });

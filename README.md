@@ -25,6 +25,13 @@ KV's eventual consistency across distant colos means the update is near-instant,
 not strictly synchronous, and a `stale-while-revalidate` fallback bounds any
 missed purge.) Workers Cache is free on all plans, so this works on the free tier.
 
+The edge TTL is carried on `Cloudflare-CDN-Cache-Control`, while browsers get
+`Cache-Control: no-cache` and revalidate on every request. This split matters:
+a purge only invalidates Cloudflare's copy, so any browser-facing `max-age`
+would pin visitors to stale data for its full duration, out of reach of the
+cron. Revalidation is cheap — it terminates at the edge on a hit, without
+running the Worker.
+
 ## Requirements
 
 - A [Cloudflare account](https://dash.cloudflare.com/sign-up) (free tier is sufficient)
