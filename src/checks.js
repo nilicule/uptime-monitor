@@ -21,9 +21,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // Cloudflare 52x codes (521 "web server is down", 522/524 timeouts, etc.) on an
 // outbound fetch are synthesized by Cloudflare's egress when it can't complete the
-// connection to the origin — not a real response from the server. A one-off is
-// usually transient (so we retry), but a 52x that survives every retry means the
-// origin is genuinely unreachable — i.e. down.
+// connection to the origin — not a real response from the server. They're often
+// transient, so they're retried (and fall back to TCP) rather than recorded as-is.
 const isTransientStatus = (code) => typeof code === "number" && code >= 520 && code <= 530;
 
 async function attemptHttp(monitor, start) {
@@ -81,27 +80,61 @@ async function attemptHttp(monitor, start) {
   }
 }
 
+// The first attempts go over HTTP; the rest fall back to a raw TCP connect on the
+// URL's port. A failed fetch can't tell "Workers' fetch path couldn't reach the
+// origin" apart from "nothing is listening" — a TCP connect can: if the port
+// answers, the service is treated as up.
+const HTTP_ATTEMPTS = 2;
+
+/** Derive the TCP port for a URL: explicit port, else the scheme's default. */
+function urlPort(url) {
+  if (url.port) return Number(url.port);
+  return url.protocol === "http:" ? 80 : 443;
+}
+
 /**
- * Perform an HTTP GET check against a monitor, with up to 4 attempts spread over ~10s.
+ * Perform an HTTP GET check against a monitor, with up to 4 attempts spread over ~10s:
+ * two HTTP attempts, then two TCP connect attempts on the URL's port as a fallback.
  * @param {{ id: string, name: string, url: string }} monitor
  * @returns {Promise<object>} result
  */
 export async function checkHttp(monitor) {
   const start = Date.now();
-  let result;
+  const url = new URL(monitor.url);
+  const port = urlPort(url);
+  const tcpTarget = { id: monitor.id, name: monitor.name, host: url.hostname, port };
+
+  let httpResult;
+  let tcpResult;
   for (let i = 0; i <= RETRY_DELAYS.length; i++) {
-    result = await attemptHttp(monitor, start);
-    // A 52x is `ok: true` but transient — retry it instead of recording immediately.
-    if (result.ok && !isTransientStatus(result.statusCode)) return result;
+    if (i < HTTP_ATTEMPTS) {
+      httpResult = await attemptHttp(monitor, start);
+      // A 52x is `ok: true` but transient — retry it instead of recording immediately.
+      if (httpResult.ok && !isTransientStatus(httpResult.statusCode)) return httpResult;
+    } else {
+      tcpResult = await attemptTcp(tcpTarget, start);
+      if (tcpResult.ok) {
+        // The port answered, so the service is up — keep the HTTP outcome for context.
+        return {
+          ...httpResult,
+          ok: true,
+          ms: tcpResult.ms,
+          error: null,
+          fallback: { type: "tcp", port },
+        };
+      }
+    }
     if (i < RETRY_DELAYS.length) await sleep(RETRY_DELAYS[i]);
   }
-  // A 52x that survived every retry means Cloudflare's egress never reached the
-  // origin — record it as down rather than a successful response.
-  if (result.ok && isTransientStatus(result.statusCode)) {
-    result.ok = false;
-    result.error = `HTTP ${result.statusCode}`;
-  }
-  return result;
+
+  // Neither HTTP nor TCP got through — record as down with both reasons.
+  const httpError = httpResult.error ?? `HTTP ${httpResult.statusCode}`;
+  return {
+    ...httpResult,
+    ok: false,
+    error: `${httpError} · TCP ${port}: ${tcpResult.error}`,
+    fallback: { type: "tcp", port },
+  };
 }
 
 async function attemptTcp(monitor, start) {

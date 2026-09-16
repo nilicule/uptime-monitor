@@ -708,6 +708,10 @@ export function getPage() {
       const maintMsg    = isMaint && monitor.maintenance.message
         ? \`<p style="color:var(--maintenance);font-size:13px;margin-top:4px">\${escHtml(monitor.maintenance.message)}</p>\`
         : '';
+      const latest      = monitor.latest;
+      const fallbackMsg = latest?.ok && latest.fallback
+        ? \`<p>Last check: up via TCP fallback on port \${escHtml(String(latest.fallback.port))} (HTTP \${escHtml(latest.statusCode != null ? String(latest.statusCode) : 'request failed')})</p>\`
+        : '';
       const slots       = buildDailySlots(monitor.bars);
       const fmtPct      = v => v != null ? v.toFixed(3) + '%' : '—';
 
@@ -719,6 +723,7 @@ export function getPage() {
             <h2>\${escHtml(monitor.name)} is <span class="\${labelClass}">\${statusLabel}</span></h2>
             \${maintMsg}
             <p>Checked every 5 minutes</p>
+            \${fallbackMsg}
           </div>
         </div>
 

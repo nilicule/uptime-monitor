@@ -21,14 +21,27 @@ uptime-monitor/
 
 | Type | Method | Timeout | What's measured |
 |------|--------|---------|-----------------|
-| `http` | GET, follows redirects | 10 s | Status code, response time, final URL |
+| `http` | GET, follows redirects | 12 s | Status code, response time, final URL |
 | `tcp` | `cloudflare:sockets` connect | 5 s | TCP connect latency |
 
-Each check makes up to 3 attempts (with 300 ms / 900 ms backoff) before recording a
-result. A failed connection is retried, as is a Cloudflare-synthesized 52x response —
-these are emitted by Workers' egress when it can't reach the origin (not a real
-response from the server) and are usually transient. A 52x that survives every retry
-means the origin is genuinely unreachable and is recorded as **down**.
+Each check makes up to 4 attempts spread over ~10 s (1 s / 3 s / 6 s backoff) before
+recording a result. Any HTTP response counts as up, except a Cloudflare-synthesized
+52x — these are emitted by Workers' egress when it can't reach the origin (not a real
+response from the server) and are retried like a failed connection.
+
+For `http` monitors, the first 2 attempts are HTTP requests. If both fail, the last 2
+attempts fall back to a TCP connect on the URL's port (the explicit port, else 443 for
+`https` / 80 for `http`):
+
+- **TCP connects** → recorded as **up**. The result keeps the last HTTP `statusCode`,
+  reports the TCP connect time as `ms`, and carries `fallback: { "type": "tcp", "port": 443 }`.
+  The detail page notes that the last check was up via the TCP fallback.
+- **TCP fails too** → recorded as **down** with a combined error, e.g.
+  `HTTP 521 · TCP 32400: <connect error>`, which is what notifications show.
+
+This separates "Workers' fetch couldn't get through" from "nothing is listening on the
+port". Note that a hung app whose port still accepts connections, or a TLS failure on an
+open port, is recorded as up.
 
 ## KV data model
 
