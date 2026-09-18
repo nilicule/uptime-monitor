@@ -29,12 +29,12 @@ recording a result. Any HTTP response counts as up, except a Cloudflare-synthesi
 52x — these are emitted by Workers' egress when it can't reach the origin (not a real
 response from the server) and are retried like a failed connection.
 
-For `http` monitors, the first 2 attempts are HTTP requests. If both fail, the last 2
-attempts fall back to a TCP connect on the URL's port (the explicit port, else 443 for
-`https` / 80 for `http`):
+For `http` monitors on a non-standard port (e.g. `https://host:32400`), the first 2
+attempts are HTTP requests. If both fail, the last 2 attempts fall back to a TCP connect
+on the URL's port:
 
 - **TCP connects** → recorded as **up**. The result keeps the last HTTP `statusCode`,
-  reports the TCP connect time as `ms`, and carries `fallback: { "type": "tcp", "port": 443 }`.
+  reports the TCP connect time as `ms`, and carries `fallback: { "type": "tcp", "port": 32400 }`.
   The detail page notes that the last check was up via the TCP fallback.
 - **TCP fails too** → recorded as **down** with a combined error, e.g.
   `HTTP 521 · TCP 32400: <connect error>`, which is what notifications show.
@@ -42,6 +42,11 @@ attempts fall back to a TCP connect on the URL's port (the explicit port, else 4
 This separates "Workers' fetch couldn't get through" from "nothing is listening on the
 port". Note that a hung app whose port still accepts connections, or a TLS failure on an
 open port, is recorded as up.
+
+URLs on port 443/80 (no explicit port) skip the fallback and use HTTP for all 4 attempts,
+with the error recorded as e.g. `HTTP 521`. Workers' `connect()` is refused on those
+ports ("consider using fetch instead") and to Cloudflare IPs, so it can't succeed there.
+For a Cloudflare-proxied host it would only prove the edge is up, not the origin, anyway.
 
 ## KV data model
 

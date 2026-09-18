@@ -86,6 +86,12 @@ async function attemptHttp(monitor, start) {
 // answers, the service is treated as up.
 const HTTP_ATTEMPTS = 2;
 
+// Workers' connect() is refused on 80/443 ("consider using fetch instead") and to
+// Cloudflare IPs, so on those ports the fallback can never succeed — and a proxied
+// host would only prove Cloudflare's edge is up, not the origin. Those URLs get
+// HTTP on every attempt instead.
+const canTcpFallback = (port) => port !== 80 && port !== 443;
+
 /** Derive the TCP port for a URL: explicit port, else the scheme's default. */
 function urlPort(url) {
   if (url.port) return Number(url.port);
@@ -94,7 +100,8 @@ function urlPort(url) {
 
 /**
  * Perform an HTTP GET check against a monitor, with up to 4 attempts spread over ~10s:
- * two HTTP attempts, then two TCP connect attempts on the URL's port as a fallback.
+ * two HTTP attempts, then two TCP connect attempts on the URL's port as a fallback
+ * (all HTTP when the port is 80/443, where the fallback isn't possible).
  * @param {{ id: string, name: string, url: string }} monitor
  * @returns {Promise<object>} result
  */
@@ -103,11 +110,12 @@ export async function checkHttp(monitor) {
   const url = new URL(monitor.url);
   const port = urlPort(url);
   const tcpTarget = { id: monitor.id, name: monitor.name, host: url.hostname, port };
+  const httpAttempts = canTcpFallback(port) ? HTTP_ATTEMPTS : RETRY_DELAYS.length + 1;
 
   let httpResult;
   let tcpResult;
   for (let i = 0; i <= RETRY_DELAYS.length; i++) {
-    if (i < HTTP_ATTEMPTS) {
+    if (i < httpAttempts) {
       httpResult = await attemptHttp(monitor, start);
       // A 52x is `ok: true` but transient — retry it instead of recording immediately.
       if (httpResult.ok && !isTransientStatus(httpResult.statusCode)) return httpResult;
@@ -129,6 +137,7 @@ export async function checkHttp(monitor) {
 
   // Neither HTTP nor TCP got through — record as down with both reasons.
   const httpError = httpResult.error ?? `HTTP ${httpResult.statusCode}`;
+  if (!tcpResult) return { ...httpResult, ok: false, error: httpError };
   return {
     ...httpResult,
     ok: false,
